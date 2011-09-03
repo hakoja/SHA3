@@ -5,13 +5,29 @@ import Data.Binary (encode)
 import Control.Applicative ((*>),(<*),(<*>),(<$>),liftA3,liftA)
 import System.IO
 
+-- The hash function to test. 
 hashFunc :: L.ByteString -> L.ByteString
 hashFunc _ = encode "0xF2E180FB5947BE964CD584E22E49624"
+--hashFunc = jh
+--hashFunc = skein
+--hashFunc = keccack
+
+main :: IO ()
+main = do 
+   file <- readFile "./testvectors/jh/KAT_MCT/ShortMsgKAT_224.txt"
+   let p_result = parse p_testFile "ShortMsgKAT_224.txt" file
+   case p_result of  
+      Left parseError -> putStrLn (show parseError)
+      Right result -> do runTestTT $ tf2Test result
+                         return ()
+
+
+----------------------------- Create a test suite --------------------------
 
 tf2Test :: TestFile -> Test
 tf2Test tf = let fHeader = header tf
              in TestLabel ("File: " ++ (fName fHeader) ++
-                           "Algorithm: " ++ (algName fHeader))
+                           " Algorithm: " ++ (algName fHeader))
                           (tf2TestList tf)
 
 tf2TestList :: TestFile -> Test
@@ -22,18 +38,7 @@ ti2TestCase ti = TestCase $
    assertEqual (show $ len ti) (digest ti) (hashFunc $ msg ti)
 
 
-
 ----------------------------- Parse test vector files --------------------------
-
-main :: IO ()
-main = do 
-   file <- readFile "./testvectors/jh/KAT_MCT/ShortMsgKAT_224.txt"
-   let p_result = parse p_testFile "ShortMsgKAT_224.txt" file
-   case p_result of  
-      Left parseError -> putStrLn "FAIL"
-      Right result -> do runTestTT $ tf2TestList result
-                         putStrLn "SUCCESS!"
-   
 
 
 data TestFile = TestFile {
