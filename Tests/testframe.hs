@@ -1,16 +1,21 @@
 import Test.HUnit
 import qualified Data.ByteString.Lazy as L
 import Text.ParserCombinators.Parsec
-import Data.Binary (encode)
 import Control.Applicative ((*>),(<*),(<*>),(<$>),liftA3,liftA)
 import System.IO
+import Data.Word (Word8)
+import Control.Monad (void)
 
 -- The hash function to test. 
 hashFunc :: L.ByteString -> L.ByteString
-hashFunc _ = encode "0xF2E180FB5947BE964CD584E22E49624"
---hashFunc = jh
+hashFunc _ = L.pack constVector
 --hashFunc = skein
 --hashFunc = keccack
+
+
+constVector = [0x2C,0x99,0xDF,0x88,0x9B,0x01,0x93,0x09,0x05,0x1C,
+               0x60,0xFE,0xCC,0x2B,0xD2,0x85,0xA7,0x74,0x94,0x0E,
+               0x43,0x17,0x5B,0x76,0xB2,0x62,0x66,0x30]
 
 main :: IO ()
 main = do 
@@ -18,8 +23,7 @@ main = do
    let p_result = parse p_testFile "ShortMsgKAT_224.txt" file
    case p_result of  
       Left parseError -> putStrLn (show parseError)
-      Right result -> do runTestTT $ tf2Test result
-                         return ()
+      Right testFile -> void . runTestTT $ tf2Test testFile
 
 
 ----------------------------- Create a test suite --------------------------
@@ -35,7 +39,7 @@ tf2TestList = TestList . map ti2TestCase . testInstances
 
 ti2TestCase :: TestInstance -> Test
 ti2TestCase ti = TestCase $ 
-   assertEqual (show $ len ti) (digest ti) (hashFunc $ msg ti)
+   assertEqual ("Len = " ++ (show $ len ti)) (digest ti) (hashFunc undefined)
 
 
 ----------------------------- Parse test vector files --------------------------
@@ -70,16 +74,18 @@ p_header = do
 
 p_testInstance :: GenParser Char st TestInstance
 p_testInstance = liftA3 TI len msg digest
-   where len = f "Len = " read digit
-         msg = f "Msg = " encode hexDigit
-         digest = f "MD = " encode hexDigit
-         f prefix reader format = 
-            reader <$> (string prefix *> manyTill format newline)
+   where len = p "Len = " read digit
+         msg = p "Msg = " L.pack p_hexNumber
+         digest = p "MD = " L.pack p_hexNumber
+         p prefix reader format = reader <$> (string prefix *> manyTill format newline)
+
+p_hexNumber :: GenParser Char st Word8
+p_hexNumber = read . ("0x" ++) <$> count 2 hexDigit
 
       
       
       
-      
+
       
       
       
