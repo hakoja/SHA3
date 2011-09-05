@@ -39,27 +39,35 @@ linearTransform (a,b) =
        c3 = (a .&. 4) `xor` d0
    in (foldl1 (.|.) [c0,c1,c2,c3], foldl1 (.|.) [d0,d1,d2,d3])
 
---permute bit 2 with bit 3, and bit 6 with bit 7, leave all other
+--in every other byte, permute the high and low nibbles
 pi_8 :: [Word8] -> [Word8]
-pi_8 = map f
-   where f a = let b26 = shiftL (a .&. 0x44) 1 
-                   b37 = shiftR (a .&. 0x88) 1
-               in (a .&. 0x33) .|. b26 .|. b37 
+pi_8 = zipWith ($) (cycle [id,switchNibbles])
 
---all the even numbered bits becomes the |xs| / 2 first bits
---all the odd numbered bits becomes the |xs| / 2 last bits  
+--all the low nibbles (4 lsb) becomes the |xs| / 2 first bytes
+--all the high nibbles (4 msb) becomes the |xs| / 2 last bytes  
 p'_8 :: [Word8] -> [Word8]
-p'_8 = packWords
+p'_8 xs = evenNibblesPacked xs ++ oddNibblesPacked xs
+   where evenNibblesPacked = take 4 . consumePairs (.|.) . evenNibbles
+         oddNibblesPacked = take 4 . consumePairs (.|.) . oddNibbles
+         evenNibbles = zipWith ($) (cycle [(.&.) 0x0f, flip shiftL 4 . (.&.) 0x0f])
+         oddNibbles = zipWith ($) (cycle [flip shiftR 4 . (.&.) 0xf0, (.&.) 0xf0])
 
---in every other byte, permute bit 0 with bit 1, bit 2 with bit 3 etc...
+--permute the high and low nibbles in the last |xs| / 2 bytes
 phi_8 :: [Word8] -> [Word8]
-phi_8 = zipWith ($) (cycle [id,f])
-   where f a = let b1 = shiftL (a .&. 0x55) 1
-                   b2 = shiftR (a .&. 0xaa) 1
-               in b1 .|. b2
+phi_8 xs = let (lbytes, hbytes) = splitAt 4 xs  
+           in lbytes ++ map switchNibbles hbytes 
 
 p_8 :: L.ByteString -> L.ByteString 
 p_8 = L.pack . phi_8 . p'_8 . pi_8 . L.unpack
+
+
+--permutes the low order nibbel (4 lsb) with the high order nibble (4 msb)
+switchNibbles :: Word8 -> Word8
+switchNibbles a = let bl = shiftR (a .&. 0xf0) 4
+                      bh = shiftL (a .&. 0x0f) 4
+                  in bh .|. bl
+
+------------------------------------------
 
 data HashState = HashState { 
          hashBitLen :: Int,
@@ -73,42 +81,6 @@ jh :: Hashable a => a -> L.ByteString
 jh = undefined
 
 ---------------------------------Solution provided by user Boris on StackOverflow -------------
-
--- the main attraction
-packString :: L.ByteString -> L.ByteString
-packString = L.pack . packWords . L.unpack
-
--- main attraction equivalent, in [Word8]
-packWords :: [Word8] -> [Word8]
-packWords ws = evenPacked ++ unevenPacked
-    where evenPacked = consumePairs packNibbles evenBits
-          unevenPacked = consumePairs packNibbles unevenBits 
-          evenBits = map packEven ws
-          unevenBits = map packUneven ws
-
--- combines 2 low nibbles into a (low nibble, high nibble) word
--- assumes that only the low nibble (first 4 bits) of both arguments can be non-zero. 
-packNibbles :: Word8 -> Word8 -> Word8
-packNibbles w1 w2 = w1 .|. (shiftL w2 4)
-
-packEven w = packBits w [0, 2, 4, 6]
-packUneven w = packBits w [1, 3, 5, 7]
-
--- packBits 254 [0, 2, 4, 6] = 14 
--- packBits 254 [1, 3, 5, 7] = 15
-packBits :: Word8 -> [Int] -> Word8
-packBits w = foldr1 (.|.) . map (packBit w)
-
--- packBit 255 0 = 1
--- packBit 255 1 = 1
--- packBit 255 2 = 2
--- packBit 255 3 = 2
--- packBit 255 4 = 4
--- packBit 255 5 = 4
--- packBit 255 6 = 8
--- packBit 255 7 = 8
-packBit :: Word8 -> Int -> Word8
-packBit w i = shiftR (w .&. bit i) ((i `div` 2) + (i `mod` 2))
 
 -- sort of like map, but halves the list in size by consuming two elements. 
 -- Is there a clearer way to write this with built-in function?
