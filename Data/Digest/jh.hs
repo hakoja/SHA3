@@ -28,6 +28,8 @@ dim = 4
 
 ------------------------------------ The S-box step ---------------------------------
 
+elems sbox
+
 
 sbox :: UArray (Int,Int) Word8
 sbox = listArray ((0,0),(1,15)) $
