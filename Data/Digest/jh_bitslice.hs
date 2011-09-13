@@ -1,22 +1,24 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE TypeSynonymInstances, BangPatterns #-}
 
+module Data.Digest.JH (
+         jh,
+      ) where
 
-import Data.LargeWord (LargeKey(..), Word128, loHalf, hiHalf)
 import Data.Bits
-import Data.Array.Unboxed
-import Data.Array.ST
 import Data.Word (Word8, Word64)
 import Data.Int (Int64)
-import Data.List
-import qualified Data.Array as A 
+import Data.List (foldl')
+import Data.Array 
+
 
 type Block512 = (Word128, Word128, Word128, Word128)
 type Block1024 = (Block512, Block512)
 
-type Word256 = LargeKey Word128 Word128
-type Word512 = LargeKey Word256 Word256
-type Word1024 = LargeKey Word512 Word512
 
+jh = undefined
+
+
+{-
 data HashState = HashState {
       hashBitLen :: Int,
       dataSizeInBuffer :: Int64,
@@ -24,19 +26,20 @@ data HashState = HashState {
       buffer :: UArray Int Word8,
       roundNr :: Int
    } 
+-}
 
 data Parity = Even | Odd
    deriving (Eq, Ord, Read, Show, Ix)
 
 sbox :: Block512 -> Word128 -> Block512
 sbox (a0,a1,a2,a3) c = 
-   let b3 = negate a3                           --1
+   let b3   = complement a3                           --1
        b0   = a0 `xor` (c .&. (complement a2))      --2
        t    = c   `xor` (b0 .&. a1)             --3
        b0'  = b0  `xor` (a2 .&. b3)             --4
-       b3'  = b3  `xor` (complement a1 .&. a2)  --5
+       b3'  = b3  `xor` ((complement a1) .&. a2)  --5
        b1   = a1  `xor` (b0' .&. a2)            --6
-       b2   = a2  `xor` (b0' .&. complement b3')--7
+       b2   = a2  `xor` (b0' .&. (complement b3'))--7
        b0'' = b0' `xor` (b1 .|. b3')            --8
        b3'' = b3' `xor` (b1 .&. b2)             --9
        b1'  = b1  `xor` (t .&. b0'')            --10
@@ -92,30 +95,33 @@ swap32 x = shiftL (x .&. 0x00000000ffffffff00000000ffffffff) 32
            .|. 
            shiftR (x .&. 0xffffffff00000000ffffffff00000000) 32 
 
-swap64 x = LargeKey (hiHalf x) (loHalf x)           
+swap64 (lo, hi) = (hi, lo)
 
 roundFunction :: Block1024 -> Int -> Block1024
 roundFunction ((a0,a1,a2,a3),(a4,a5,a6,a7)) roundNr = 
    let r = roundNr `mod` 7
-       evens = sbox (a0, a2, a4, a6) (c ! (roundNr, Even))
-       odds  = sbox (a1, a3, a5, a7) (c ! (roundNr, Odd))
+       evens = sbox (a0, a2, a4, a6) (constants ! (roundNr, Even))
+       odds  = sbox (a1, a3, a5, a7) (constants ! (roundNr, Odd))
        ((b0,b2,b4,b6),(u1,u3,u5,u7)) = linearTransform (evens,odds)
        (b1,b3,b5,b7) = (swap r u1, swap r u3, swap r u5, swap r u7)
    in ((b0,b1,b2,b3),(b4,b5,b6,b7))
  
 e8 :: Block1024 -> Block1024
-e8 hs = foldl' roundFunction hs [0..42] 
+e8 hs = foldl' roundFunction hs [0..41] 
 
-f8 :: Word1024 -> Word512 -> Word1024
-f8 (LargeKey lo hi) m = let a@(LargeKey al ah) = LargeKey (m `xor` lo) hi
-                            LargeKey bl bh = id a
-                        in LargeKey bl (bh `xor` m)
+f8 :: Block1024 -> Block512 -> Block1024
+f8 (lo, hi) m = let al =  tupleZip xor lo m
+                    (!bl, !bh) = e8 (al, hi)
+                in (bl, tupleZip xor bh m)
 
+tupleZip :: (a -> b -> c) -> (a, a, a, a) -> (b, b, b, b) -> (c, c, c, c)
+tupleZip f (a1,a2,a3,a4) (b1,b2,b3,b4) = (f a1 b1, f a2 b2, f a3 b3, f a4 b4) 
 
 -------------- Round constants -------------------
 
-c :: A.Array (Int,Parity) Word128
-c = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even,Odd]]
+
+constants :: Array (Int,Parity) Word128
+constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even,Odd]]
      [0x72d5dea2df15f8677b84150ab7231557, 0x81abd6904d5a87f64e9f4fc5c3d12b40,
       0xea983ae05c45fa9c03c5d29966b2999a, 0x660296b4f2bb538ab556141a88dba231,
       0x03a35a5c9a190edb403fb20a87c14410, 0x1c051980849e951d6f33ebad5ee7cddc,
@@ -158,3 +164,62 @@ c = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even,Odd]]
       0x8ba0df15762592d93c85f7f612dc42be, 0xd8a7ec7cab27b07e538d7ddaaa3ea8de,
       0xaa25ce93bd0269d85af643fd1a7308f9, 0xc05fefda174a19a5974d66334cfd216a,
       0x35b49831db411570ea1e0fbbedcd549b, 0x9ad063a151974072f6759dbf91476fe2]
+ 
+ -------------------------------- Word128 ---------------------------
+
+
+type Word128 = (Word64, Word64)
+
+
+---------------------- Num instance -------------------------
+
+instance Num Word128 where
+   (+)      = word128Plus
+   (*)      = word128Times
+   abs x    = x
+   signum 0 = 0
+   signum _ = 1
+   fromInteger x = (fromInteger x, fromInteger $ shiftR x 64)
+   
+word128Plus :: Word128 -> Word128 -> Word128
+(xl,xh) `word128Plus` (yl,yh) =
+   let xl' = fromIntegral xl :: Integer
+       yl' = fromIntegral yl :: Integer
+       xh' = shiftL (fromIntegral xh :: Integer) 64
+       yh' = shiftL (fromIntegral yh :: Integer) 64
+       sum = (xl' + xh') + (yl' + yh')
+   in (fromIntegral sum, fromIntegral $ shiftR sum 64)
+
+word128Times :: Word128 -> Word128 -> Word128
+(xl,xh) `word128Times` (yl,yh) = 
+   let xl' = fromIntegral xl :: Integer
+       yl' = fromIntegral yl :: Integer
+       xh' = shiftL (fromIntegral xh :: Integer) 64
+       yh' = shiftL (fromIntegral yh :: Integer) 64
+       product = (xl' + xh') * (yl' + yh')
+   in (fromIntegral product, fromIntegral $ shiftR product 64)
+
+word128Abs :: Word128 -> Word128
+word128Abs x = x
+
+-------------------------- Bits instance --------------------
+
+instance Bits Word128 where
+   (xl,xh) .&. (yl,yh)     = (xl .&. yl, xh .&. yh)
+   (xl,xh) .|. (yl,yh)     = (xl .|. yl, xh .|. yh)
+   (xl,xh) `xor` (yl,yh)   = (xl `xor` yl, xh `xor` yh)
+   complement (xl,xh)      = (complement xl, complement xh)
+   shift                   = word128Shift
+   rotate                  = word128Rotate
+   bitSize _               = 128
+   isSigned _              = False
+   
+word128Shift :: Word128 -> Int -> Word128
+word128Shift (xl, xh) n 
+   | n >= 0       = (shiftL xl n, (shiftL xh n) .|. (shiftR xl (64 - n)))
+   | otherwise    = ((shiftR xl (-n)) .|. (shiftL xh (64 + n)), shiftR xh (-n))
+
+word128Rotate :: Word128 -> Int -> Word128
+word128Rotate x n
+   | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
+   | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
