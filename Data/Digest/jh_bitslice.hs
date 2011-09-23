@@ -33,12 +33,16 @@ print512 xs = let (a,b,c,d) = tupleMap (printf "0x%032x" . toIntegerW128) xs
 evenWords :: Block1024 -> Block512
 evenWords ((a0,a1,a2,a3),(a4,a5,a6,a7)) = (a0,a2,a4,a6)
 
-m0 = (0x2,0,0,0)
-m1 = (0,0,0,1)
+m0 = (0x40,0,0,0)
+m1 = (0,0,0,2^127)
 
 testRun = drop 6 . print1024 $ f8 (f8 jh224_H0 m0) m1 
 
 testRoundFunction = print1024 . roundFunction ((0,0,0,0),(0,0,0,0))
+
+testE8 = print1024 $ e8 ((0,0,0,0),(0,0,0,0))
+
+testF8 = print1024 $ f8 ((0,0,0,0),(0,0,0,0)) (0xaf, 0, 0, 0)
 
 ------------------------------------------------
 
@@ -48,17 +52,17 @@ data Parity = Even | Odd
 
 sbox :: Block512 -> Word128 -> Block512
 sbox (a0,a1,a2,a3) c = 
-   let b3   = complement a3                           --1
-       b0   = a0 `xor` (c .&. (complement a2))      --2
-       t    = c   `xor` (b0 .&. a1)             --3
-       b0'  = b0  `xor` (a2 .&. b3)             --4
-       b3'  = b3  `xor` ((complement a1) .&. a2)  --5
-       b1   = a1  `xor` (b0' .&. a2)            --6
-       b2   = a2  `xor` (b0' .&. (complement b3'))--7
-       b0'' = b0' `xor` (b1 .|. b3')            --8
-       b3'' = b3' `xor` (b1 .&. b2)             --9
-       b1'  = b1  `xor` (t .&. b0'')            --10
-       b2'  = b2  `xor`t                        --11
+   let b3   = complement a3                        --1
+       b0   = a0 	`xor` (c .&. (complement a2))    --2
+       t    = c   `xor` (b0 .&. a1)             	--3
+       b0'  = b0  `xor` (a2 .&. b3)             	--4
+       b3'  = b3  `xor` ((complement a1) .&. a2)  	--5
+       b1   = a1  `xor` (b0' .&. a2)            	--6
+       b2   = a2  `xor` (b0' .&. (complement b3'))	--7
+       b0'' = b0' `xor` (b1 .|. b3')            	--8
+       b3'' = b3' `xor` (b1 .&. b2)             	--9
+       b1'  = b1  `xor` (t .&. b0'')           	 	--10
+       b2'  = b2  `xor`t                        	--11
    in (b0'',b1',b2',b3'')
 
 linearTransform :: Block1024 -> Block1024
