@@ -10,12 +10,22 @@ import Data.Int (Int64)
 import Data.List (foldl')
 import Data.Array 
 
+import Text.Printf (printf)
+
 
 type Block512 = (Word128, Word128, Word128, Word128)
 type Block1024 = (Block512, Block512)
 
 
+
 jh = undefined
+
+
+--------------------- testing ------------------
+
+
+
+------------------------------------------------
 
 
 data Parity = Even | Odd
@@ -114,6 +124,12 @@ tupleMap f (a0,a1,a2,a3) = (f a0, f a1, f a2, f a3)
 
 -------------- Round constants -------------------
 
+jh224_H0 = 
+	[0xe734d619d6ac7caeac989af962ddfe2d,0x941466c9c63860b8161230bc51083a4,
+	 0xdc1a9b1d1ba39ece6f7080259f89d966,0xc16fa27f8594f9106e367b5f32e811,
+	 0x9980736e7fa1f697b340c8d85c1b4f1b,0x689a53c9dee831a4d3a3eaada593dfdc,
+	 0xf06ce59c95ac74d5e4a186ec8aa9b422,0x6eea64ddf0dc1196bf2babb5ead9615]
+
 
 constants :: Array (Int,Parity) Word128
 constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even,Odd]]
@@ -210,7 +226,7 @@ instance Bits Word128 where
    rotate                  = word128Rotate
    bitSize _               = 128
    isSigned _              = False
-   
+	   
 word128Shift :: Word128 -> Int -> Word128
 word128Shift (xl, xh) n 
    | n >= 0       = (shiftL xl n, (shiftL xh n) .|. (shiftR xl (64 - n)))
@@ -220,3 +236,4 @@ word128Rotate :: Word128 -> Int -> Word128
 word128Rotate x n
    | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
    | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
+
