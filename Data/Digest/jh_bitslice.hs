@@ -18,16 +18,6 @@ type Block1024 = (Block512, Block512)
 jh = undefined
 
 
-{-
-data HashState = HashState {
-      hashBitLen :: Int,
-      dataSizeInBuffer :: Int64,
-      state :: STUArray Word128 Int Word128,
-      buffer :: UArray Int Word8,
-      roundNr :: Int
-   } 
--}
-
 data Parity = Even | Odd
    deriving (Eq, Ord, Read, Show, Ix)
 
@@ -102,8 +92,8 @@ roundFunction ((a0,a1,a2,a3),(a4,a5,a6,a7)) roundNr =
    let r = roundNr `mod` 7
        evens = sbox (a0, a2, a4, a6) (constants ! (roundNr, Even))
        odds  = sbox (a1, a3, a5, a7) (constants ! (roundNr, Odd))
-       ((b0,b2,b4,b6),(u1,u3,u5,u7)) = linearTransform (evens,odds)
-       (b1,b3,b5,b7) = (swap r u1, swap r u3, swap r u5, swap r u7)
+       ((b0,b2,b4,b6),oddsTransformed) = linearTransform (evens,odds)
+       (b1,b3,b5,b7) = tupleMap (swap r) oddsTransformed
    in ((b0,b1,b2,b3),(b4,b5,b6,b7))
  
 e8 :: Block1024 -> Block1024
@@ -114,8 +104,13 @@ f8 (lo, hi) m = let al =  tupleZip xor lo m
                     (!bl, !bh) = e8 (al, hi)
                 in (bl, tupleZip xor bh m)
 
+---------------------- Utility function -----------------
+
 tupleZip :: (a -> b -> c) -> (a, a, a, a) -> (b, b, b, b) -> (c, c, c, c)
 tupleZip f (a1,a2,a3,a4) (b1,b2,b3,b4) = (f a1 b1, f a2 b2, f a3 b3, f a4 b4) 
+
+tupleMap :: (a -> b) -> (a, a, a, a) -> (b, b, b, b)
+tupleMap f (a0,a1,a2,a3) = (f a0, f a1, f a2, f a3)
 
 -------------- Round constants -------------------
 
@@ -170,6 +165,8 @@ constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even
 
 type Word128 = (Word64, Word64)
 
+toIntegerW128 :: Word128 -> Integer
+toIntegerW128 (l,h) = shiftL (toInteger h) 64 + (toInteger l)
 
 ---------------------- Num instance -------------------------
 
