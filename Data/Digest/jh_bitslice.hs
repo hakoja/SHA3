@@ -37,30 +37,33 @@ print1024 :: Block1024 -> [String]
 print1024 (u,v) = print512 u ++ print512 v
 
 print512 :: Block512 -> [String]
-print512 xs = let (a,b,c,d) = tupleMap (printf "0x%032x" . w128toInteger) xs
+print512 xs = let (a,b,c,d) = tupleMap print128 xs
 				  in [a,b,c,d]
 
 print128 :: Word128 -> String
-print128 = printf "0x%032x" . w128toInteger
+print128 = ("0x" ++) . printf "%032x" . w128toInteger
 
 evenWords :: Block1024 -> Block512
 evenWords ((a0,a1,a2,a3),(a4,a5,a6,a7)) = (a0,a2,a4,a6)
 
 m0 = ((0,0xaa80000000000000),0,0,0)
 m1 = (0,0,0,0x8)
+m2 = (0,0,0,0) :: Block512
 
-testRun = print1024 $ f8 (f8 jh224_H0 m0) m1 
+h0 = ((0,0,0,0),(0,0,0,0)) :: Block1024
 
-testRoundFunction = print1024 . roundFunction ((0,0,0,0),(0,0,0,0))
+kat0 = testF8 ((0x8000000000000000,0),0,0,0)
+kat1 = testRun ((0x4000000000000000,0),0,0,0) (0,0,0,1)
+kat2 = testRun ((0xe000000000000000,0),0,0,0) (0,0,0,2)
 
-testE8 = print1024 $ e8 ((0,0,0,0),(0,0,0,0))
+testRun x y = print1024 $ f8 (f8 jh224_H0 x) y 
+
+testRoundFunction = \x n -> (print1024 $ roundFunction x n)
+
+testE8 = print1024 . e8
 
 testF8 = print1024 . f8 jh224_H0
 
-s = ((0x8cd388eeb2c2911bc6cf0e9d1154ec00, 0x0acd42fab302532a993388977f447367,
-     	0xb89b84b3f57b549f7c6bdf91a6098003, 0x433b6f6a1b341d64e6f9b8f1e5fb7727),
-     (0xba4e51200cf7eb274e42d2e6bfaeae60, 0xb2fae4c12dedf3e269b41778469f506a,
-      0x43492014ff4532921b2b279f5548a521, 0xb91ea5ff24c22cf3babc4b3fffe1594c))
 
 finalize (_,(x1,x2,x3,x4)) 224 = 
 	printf "0x%056x\n" $ shiftL ((w128toInteger (shiftR x3 32))) 128 + (w128toInteger x4) 
@@ -135,7 +138,7 @@ swap32 x = shiftL (x .&. 0x00000000ffffffff00000000ffffffff) 32
            .|. 
            shiftR (x .&. 0xffffffff00000000ffffffff00000000) 32 
 
-swap64 (lo, hi) = (hi, lo)
+swap64 (hi, lo) = (lo, hi)
 
 roundFunction :: Block1024 -> Int -> Block1024
 roundFunction ((a0,a1,a2,a3),(a4,a5,a6,a7)) roundNr = 
@@ -150,9 +153,9 @@ e8 :: Block1024 -> Block1024
 e8 hs = foldl' roundFunction hs [0..41] 
 
 f8 :: Block1024 -> Block512 -> Block1024
-f8 (lo, hi) m = let al =  tupleZip xor lo m
-                    (!bl, !bh) = e8 (al, hi)
-                in (bl, tupleZip xor bh m)
+f8 (hh, hl) m = let ah =  tupleZip xor hh m
+                    (bh, bl) = e8 (ah, hl)
+                in (bh, tupleZip xor bl m)
 
 ---------------------- Utility functions -----------------
 
@@ -166,13 +169,6 @@ tupleMap f (a0,a1,a2,a3) = (f a0, f a1, f a2, f a3)
 
 -- Initial hash values
 jh224_H0 =
-{- 
-	((0xe734d619d6ac7caeac989af962ddfe2d,0x941466c9c63860b8161230bc051083a4,
-	  0xdc1a9b1d1ba39ece6f7080259f89d966,0xc106fa027f8594f9106e367b5f32e811),
-		
-	 (0x9980736e7fa1f697b340c8d85c1b4f1b,0x689a53c9dee831a4d3a3eaada593dfdc,
-	  0xf06ce59c95ac74d5e4a186ec8aa9b422,0x6eea64ddf0dc1196bf2babb5ea0d9615))
--}	
 	((0x2dfedd62f99a98acae7cacd619d634e7,0xa4831005bc301216b86038c6c9661494,
 	  0x66d9899f2580706fce9ea31b1d9b1adc,0x11e8325f7b366e10f994857f02fa06c1),
 	  
@@ -230,11 +226,12 @@ constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even
  -------------------------------- Word128 ---------------------------
 
 
-
+-- an unsigned 128 bit word. 
+-- given x = (a,b), then a represents the 64 MSB, and b the 64 LSB
 type Word128 = (Word64, Word64)
 
 w128toInteger :: Word128 -> Integer
-w128toInteger (l,h) = shiftL (toInteger h) 64 + (toInteger l)
+w128toInteger (h,l) = shiftL (toInteger h) 64 + (toInteger l)
 
 ---------------------- Num instance -------------------------
 
@@ -244,25 +241,25 @@ instance Num Word128 where
    abs x    = x
    signum 0 = 0
    signum _ = 1
-   fromInteger x = (fromInteger x, fromInteger $ shiftR x 64)
+   fromInteger x = (fromInteger $ shiftR x 64, fromInteger x)
    
 word128Plus :: Word128 -> Word128 -> Word128
-(xl,xh) `word128Plus` (yl,yh) =
+(xh,xl) `word128Plus` (yh,yl) =
    let xl' = fromIntegral xl :: Integer
        yl' = fromIntegral yl :: Integer
        xh' = shiftL (fromIntegral xh :: Integer) 64
        yh' = shiftL (fromIntegral yh :: Integer) 64
        sum = (xl' + xh') + (yl' + yh')
-   in (fromIntegral sum, fromIntegral $ shiftR sum 64)
+   in (fromIntegral $ shiftR sum 64, fromIntegral sum)
 
 word128Times :: Word128 -> Word128 -> Word128
-(xl,xh) `word128Times` (yl,yh) = 
+(xh,xl) `word128Times` (yh,yl) = 
    let xl' = fromIntegral xl :: Integer
        yl' = fromIntegral yl :: Integer
        xh' = shiftL (fromIntegral xh :: Integer) 64
        yh' = shiftL (fromIntegral yh :: Integer) 64
        product = (xl' + xh') * (yl' + yh')
-   in (fromIntegral product, fromIntegral $ shiftR product 64)
+   in (fromIntegral $ shiftR product 64, fromIntegral product)
 
 word128Abs :: Word128 -> Word128
 word128Abs = id
@@ -270,19 +267,19 @@ word128Abs = id
 -------------------------- Bits instance --------------------
 
 instance Bits Word128 where
-   (xl,xh) .&. (yl,yh)     = (xl .&. yl, xh .&. yh)
-   (xl,xh) .|. (yl,yh)     = (xl .|. yl, xh .|. yh)
-   (xl,xh) `xor` (yl,yh)   = (xl `xor` yl, xh `xor` yh)
-   complement (xl,xh)      = (complement xl, complement xh)
+   (xh,xl) .&. (yh,yl)     = (xh .&. yh, xl .&. yl)
+   (xh,xl) .|. (yh,yl)     = (xh .|. yh, xl .|. yl)
+   (xh,xl) `xor` (yh,yl)   = (xh `xor` yh, xl `xor` yl)
+   complement (xh,xl)      = (complement xh, complement xl)
    shift                   = word128Shift
    rotate                  = word128Rotate
    bitSize _               = 128
    isSigned _              = False
 	   
 word128Shift :: Word128 -> Int -> Word128
-word128Shift (xl, xh) n 
-   | n >= 0       = (shiftL xl n, (shiftL xh n) .|. (shiftR xl (64 - n)))
-   | otherwise    = ((shiftR xl (-n)) .|. (shiftL xh (64 + n)), shiftR xh (-n))
+word128Shift (xh, xl) n 
+   | n >= 0       = ((shiftL xh n) .|. (shiftR xl (64 - n)), shiftL xl n)
+   | otherwise    = (shiftR xh (-n), (shiftR xl (-n)) .|. (shiftL xh (64 + n)))
 
 word128Rotate :: Word128 -> Int -> Word128
 word128Rotate x n
