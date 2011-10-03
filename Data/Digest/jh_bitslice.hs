@@ -13,6 +13,7 @@ import Data.Binary
 import qualified Data.ByteString.Lazy as L 
 
 import Text.Printf (printf)
+import Data.BigWord.Word128
 
 
 type Block512 = (Word128, Word128, Word128, Word128)
@@ -26,7 +27,7 @@ jh = undefined
 
 bsToWord128 :: L.ByteString -> Word128
 bsToWord128 xs = let (wh,rest) = L.splitAt 8 xs
-					  in (decode (L.take 8 rest), decode wh) 
+					  in W (decode wh) (decode (L.take 8 rest)) 
 
 
 
@@ -52,9 +53,9 @@ m2 = (0,0,0,0) :: Block512
 
 h0 = ((0,0,0,0),(0,0,0,0)) :: Block1024
 
-kat0 = testF8 ((0x8000000000000000,0),0,0,0)
-kat1 = testRun ((0x4000000000000000,0),0,0,0) (0,0,0,1)
-kat2 = testRun ((0xe000000000000000,0),0,0,0) (0,0,0,2)
+kat0 = testF8 ((W 0x8000000000000000 0),0,0,0)
+kat1 = testRun ((W 0x4000000000000000 0),0,0,0) (0,0,0,1)
+kat2 = testRun ((W 0xe000000000000000 0),0,0,0) (0,0,0,2)
 
 testRun x y = print1024 $ f8 (f8 jh224_H0 x) y 
 
@@ -64,8 +65,8 @@ testE8 = print1024 . e8
 
 testF8 = print1024 . f8 jh224_H0
 
-
-finalize (_,(x1,x2,x3,x4)) 224 = 
+finalize :: Block1024 -> String
+finalize (_,(x1,x2,x3,x4)) = 
 	printf "0x%056x\n" $ shiftL ((w128toInteger (shiftR x3 32))) 128 + (w128toInteger x4) 
 
 
@@ -138,7 +139,7 @@ swap32 x = shiftL (x .&. 0x00000000ffffffff00000000ffffffff) 32
            .|. 
            shiftR (x .&. 0xffffffff00000000ffffffff00000000) 32 
 
-swap64 (hi, lo) = (lo, hi)
+swap64 (W hi lo) = W lo hi
 
 roundFunction :: Block1024 -> Int -> Block1024
 roundFunction ((a0,a1,a2,a3),(a4,a5,a6,a7)) roundNr = 
@@ -222,7 +223,8 @@ constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even
 		0x8ba0df15762592d93c85f7f612dc42be, 0xd8a7ec7cab27b07e538d7ddaaa3ea8de,
 		0xaa25ce93bd0269d85af643fd1a7308f9, 0xc05fefda174a19a5974d66334cfd216a,
 		0x35b49831db411570ea1e0fbbedcd549b, 0x9ad063a151974072f6759dbf91476fe2]
- 
+
+{- 
  -------------------------------- Word128 ---------------------------
 
 
@@ -285,4 +287,4 @@ word128Rotate :: Word128 -> Int -> Word128
 word128Rotate x n
    | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
    | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
-
+-}
