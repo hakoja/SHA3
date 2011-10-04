@@ -6,7 +6,9 @@ module Data.BigWord.Word128 (
 		) where
 
 import Data.Bits
-import Data.Word (Word8, Word64)	
+import Data.Word (Word64)	
+import Data.Binary
+import Control.Monad (liftM2)
 		
 
 
@@ -71,3 +73,8 @@ word128Rotate x n
    | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
    | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
 
+---------------------- Binary instance ---------------------
+
+instance Binary Word128 where
+   put (W h l) = put h >> put l
+   get         = liftM2 W get get

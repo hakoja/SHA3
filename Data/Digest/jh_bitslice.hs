@@ -23,12 +23,10 @@ type Block1024 = (Block512, Block512)
 
 jh = undefined
 
--------------------- Conversion between Bytestrings Word128 -------------
+-------------------- Conversion between Bytestrings and Word128 -------------
 
 bsToWord128 :: L.ByteString -> Word128
-bsToWord128 xs = let (wh,rest) = L.splitAt 8 xs
-					  in W (decode wh) (decode (L.take 8 rest)) 
-
+bsToWord128 = decode . L.take 16 
 
 
 
@@ -43,9 +41,6 @@ print512 xs = let (a,b,c,d) = tupleMap print128 xs
 
 print128 :: Word128 -> String
 print128 = ("0x" ++) . printf "%032x" . w128toInteger
-
-evenWords :: Block1024 -> Block512
-evenWords ((a0,a1,a2,a3),(a4,a5,a6,a7)) = (a0,a2,a4,a6)
 
 m0 = ((0,0xaa80000000000000),0,0,0)
 m1 = (0,0,0,0x8)
@@ -223,68 +218,3 @@ constants = array ((0, Even), (41, Odd)) $ zip [(i,p) | i <- [0..41], p <- [Even
 		0x8ba0df15762592d93c85f7f612dc42be, 0xd8a7ec7cab27b07e538d7ddaaa3ea8de,
 		0xaa25ce93bd0269d85af643fd1a7308f9, 0xc05fefda174a19a5974d66334cfd216a,
 		0x35b49831db411570ea1e0fbbedcd549b, 0x9ad063a151974072f6759dbf91476fe2]
-
-{- 
- -------------------------------- Word128 ---------------------------
-
-
--- an unsigned 128 bit word. 
--- given x = (a,b), then a represents the 64 MSB, and b the 64 LSB
-type Word128 = (Word64, Word64)
-
-w128toInteger :: Word128 -> Integer
-w128toInteger (h,l) = shiftL (toInteger h) 64 + (toInteger l)
-
----------------------- Num instance -------------------------
-
-instance Num Word128 where
-   (+)      = word128Plus
-   (*)      = word128Times
-   abs x    = x
-   signum 0 = 0
-   signum _ = 1
-   fromInteger x = (fromInteger $ shiftR x 64, fromInteger x)
-   
-word128Plus :: Word128 -> Word128 -> Word128
-(xh,xl) `word128Plus` (yh,yl) =
-   let xl' = fromIntegral xl :: Integer
-       yl' = fromIntegral yl :: Integer
-       xh' = shiftL (fromIntegral xh :: Integer) 64
-       yh' = shiftL (fromIntegral yh :: Integer) 64
-       sum = (xl' + xh') + (yl' + yh')
-   in (fromIntegral $ shiftR sum 64, fromIntegral sum)
-
-word128Times :: Word128 -> Word128 -> Word128
-(xh,xl) `word128Times` (yh,yl) = 
-   let xl' = fromIntegral xl :: Integer
-       yl' = fromIntegral yl :: Integer
-       xh' = shiftL (fromIntegral xh :: Integer) 64
-       yh' = shiftL (fromIntegral yh :: Integer) 64
-       product = (xl' + xh') * (yl' + yh')
-   in (fromIntegral $ shiftR product 64, fromIntegral product)
-
-word128Abs :: Word128 -> Word128
-word128Abs = id
-
--------------------------- Bits instance --------------------
-
-instance Bits Word128 where
-   (xh,xl) .&. (yh,yl)     = (xh .&. yh, xl .&. yl)
-   (xh,xl) .|. (yh,yl)     = (xh .|. yh, xl .|. yl)
-   (xh,xl) `xor` (yh,yl)   = (xh `xor` yh, xl `xor` yl)
-   complement (xh,xl)      = (complement xh, complement xl)
-   shift                   = word128Shift
-   rotate                  = word128Rotate
-   bitSize _               = 128
-   isSigned _              = False
-	   
-word128Shift :: Word128 -> Int -> Word128
-word128Shift (xh, xl) n 
-   | n >= 0       = ((shiftL xh n) .|. (shiftR xl (64 - n)), shiftL xl n)
-   | otherwise    = (shiftR xh (-n), (shiftR xl (-n)) .|. (shiftL xh (64 + n)))
-
-word128Rotate :: Word128 -> Int -> Word128
-word128Rotate x n
-   | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
-   | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
--}
