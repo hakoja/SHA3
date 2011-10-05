@@ -5,30 +5,62 @@ module Data.Digest.JH (
       ) where
 
 import Data.Bits
-import Data.Word (Word8, Word64)
+import Data.Word (Word64)
 import Data.Int (Int64)
 import Data.List (foldl')
 import Data.Array 
 import Data.Binary
+import Data.Binary.Get
 import qualified Data.ByteString.Lazy as L 
+import qualified Data.ByteString as B
+import Control.Monad (liftM, liftM2, liftM4)
+
 
 import Text.Printf (printf)
 import Data.BigWord.Word128
 
 
-type Block512 = (Word128, Word128, Word128, Word128)
 type Block1024 = (Block512, Block512)
 
+data Block512 = B !Word128 !Word128 !Word128 !Word128
+   deriving (Eq,Ord,Show)
+
+data Parity = Even | Odd
+   deriving (Eq, Ord, Read, Show, Ix)
 
 
-jh = undefined
+jh :: L.ByteString -> Block1024
+jh = foldl' f8 jh224_H0 . parseMessage
 
--------------------- Conversion between Bytestrings and Word128 -------------
+---------------------------------------------------
 
-bsToWord128 :: L.ByteString -> Word128
-bsToWord128 = decode . L.take 16 
+data JHCtx = Ctx {
+            dataBitLen :: !Word64,
+            hashBitLen :: !Int
+         }
 
 
+-------------------- Parse and pad a message -------------
+
+parseMessage :: L.ByteString -> [Block512]
+parseMessage xs = let (pre,suf) = L.splitAt blockSize xs
+                  in if not (L.null suf)
+                     then parseBlock pre : parseMessage suf
+                  else pad pre
+                     where blockSize = 64
+
+parseBlock :: L.ByteString -> Block512
+parseBlock = runGet $ liftM4 B parseW128 parseW128 parseW128 parseW128    
+   where parseW128 = liftM2 W getWord64be getWord64be
+
+pad :: L.ByteString -> [Block512]
+pad xs
+   | L.null xs = [B (W 0x8000000000000000 0) 0 0 0]
+   | otherwise = [zeroPadded, lengthPadded]
+   where zeroPadded = parseBlock $ L.append xs (L.replicate (blockLength - dataLength) 0)
+         lengthPadded = B 0 0 0 (fromIntegral dataLength * 8)
+         blockLength = 64
+         dataLength = L.length xs
 
 --------------------- testing ------------------
 
@@ -36,21 +68,27 @@ print1024 :: Block1024 -> [String]
 print1024 (u,v) = print512 u ++ print512 v
 
 print512 :: Block512 -> [String]
-print512 xs = let (a,b,c,d) = tupleMap print128 xs
-				  in [a,b,c,d]
+print512 (B a b c d) = [print128 a,print128 b,print128 c,print128 d]
 
 print128 :: Word128 -> String
 print128 = ("0x" ++) . printf "%032x" . w128toInteger
 
-m0 = ((0,0xaa80000000000000),0,0,0)
-m1 = (0,0,0,0x8)
-m2 = (0,0,0,0) :: Block512
+m0 = B (0xaa80000000000000) 0 0 0
+m1 = B 0 0 0 0x8
+m2 = B 0 0 0 0 :: Block512
 
-h0 = ((0,0,0,0),(0,0,0,0)) :: Block1024
+h0 = (B 0 0 0 0, B 0 0 0 0) :: Block1024
 
-kat0 = testF8 ((W 0x8000000000000000 0),0,0,0)
-kat1 = testRun ((W 0x4000000000000000 0),0,0,0) (0,0,0,1)
-kat2 = testRun ((W 0xe000000000000000 0),0,0,0) (0,0,0,2)
+kat0 = testF8  (B (W 0x8000000000000000 0) 0 0 0)
+kat1 = testRun (B (W 0x4000000000000000 0) 0 0 0) (B 0 0 0 1)
+kat2 = testRun (B (W 0xe000000000000000 0) 0 0 0) (B 0 0 0 2)
+kat3 = testRun (B (W 0xc000000000000000 0) 0 0 0) (B 0 0 0 3)
+kat4 = testRun (B (W 0x8000000000000000 0) 0 0 0) (B 0 0 0 4)
+kat5 = testRun (B (W 0x4800000000000000 0) 0 0 0) (B 0 0 0 5)
+kat6 = testRun (B (W 0x5000000000000000 0) 0 0 0) (B 0 0 0 6)
+kat7 = testRun (B (W 0x9800000000000000 0) 0 0 0) (B 0 0 0 7)
+kat8 = testRun (B (W 0xcc00000000000000 0) 0 0 0) (B 0 0 0 8)
+
 
 testRun x y = print1024 $ f8 (f8 jh224_H0 x) y 
 
@@ -61,18 +99,14 @@ testE8 = print1024 . e8
 testF8 = print1024 . f8 jh224_H0
 
 finalize :: Block1024 -> String
-finalize (_,(x1,x2,x3,x4)) = 
+finalize (_, B x1 x2 x3 x4) = 
 	printf "0x%056x\n" $ shiftL ((w128toInteger (shiftR x3 32))) 128 + (w128toInteger x4) 
 
 
 ------------------------------------------------
 
-
-data Parity = Even | Odd
-   deriving (Eq, Ord, Read, Show, Ix)
-
 sbox :: Block512 -> Word128 -> Block512
-sbox (a0,a1,a2,a3) c = 
+sbox (B a0 a1 a2 a3) c = 
    let b3   = complement a3                        --1
        b0   = a0 	`xor` (c .&. (complement a2))    --2
        t    = c   `xor` (b0 .&. a1)             	--3
@@ -84,10 +118,10 @@ sbox (a0,a1,a2,a3) c =
        b3'' = b3' `xor` (b1 .&. b2)             	--9
        b1'  = b1  `xor` (t .&. b0'')           	 	--10
        b2'  = b2  `xor`t                        	--11
-   in (b0'',b1',b2',b3'')
+   in B b0'' b1' b2' b3''
 
 linearTransform :: Block1024 -> Block1024
-linearTransform ((a0,a1,a2,a3), (a4,a5,a6,a7)) =
+linearTransform (B a0 a1 a2 a3, B a4 a5 a6 a7) =
    let b4 = a4 `xor` a1
        b5 = a5 `xor` a2
        b6 = a6 `xor` a3 `xor` a0
@@ -96,7 +130,7 @@ linearTransform ((a0,a1,a2,a3), (a4,a5,a6,a7)) =
        b1 = a1 `xor` b6
        b2 = a2 `xor` b7 `xor` b4
        b3 = a3 `xor` b4
-   in ((b0,b1,b2,b3),(b4,b5,b6,b7))
+   in (B b0 b1 b2 b3, B b4 b5 b6 b7)
 
 swap :: Int -> Word128 -> Word128
 swap 0 = swap1
@@ -137,40 +171,40 @@ swap32 x = shiftL (x .&. 0x00000000ffffffff00000000ffffffff) 32
 swap64 (W hi lo) = W lo hi
 
 roundFunction :: Block1024 -> Int -> Block1024
-roundFunction ((a0,a1,a2,a3),(a4,a5,a6,a7)) roundNr = 
+roundFunction (B a0 a1 a2 a3, B a4 a5 a6 a7) roundNr = 
    let r = roundNr `mod` 7
-       evens = sbox (a0, a2, a4, a6) (constants ! (roundNr, Even))
-       odds  = sbox (a1, a3, a5, a7) (constants ! (roundNr, Odd))
-       ((b0,b2,b4,b6),oddsTransformed) = linearTransform (evens,odds)
-       (b1,b3,b5,b7) = tupleMap (swap r) oddsTransformed
-   in ((b0,b1,b2,b3),(b4,b5,b6,b7))
+       evens = sbox (B a0 a2 a4 a6) (constants ! (roundNr, Even))
+       odds  = sbox (B a1 a3 a5 a7) (constants ! (roundNr, Odd))
+       (B b0 b2 b4 b6, oddsTransformed) = linearTransform (evens,odds)
+       (B b1 b3 b5 b7) = blockMap (swap r) oddsTransformed
+   in (B b0 b1 b2 b3, B b4 b5 b6 b7)
  
 e8 :: Block1024 -> Block1024
 e8 hs = foldl' roundFunction hs [0..41] 
 
 f8 :: Block1024 -> Block512 -> Block1024
-f8 (hh, hl) m = let ah =  tupleZip xor hh m
-                    (bh, bl) = e8 (ah, hl)
-                in (bh, tupleZip xor bl m)
+f8 (hh,hl) m = let ah = hh `xor512` m
+                   (bh, bl) = e8 (ah, hl)
+                in (bh, bl `xor512` m)
 
 ---------------------- Utility functions -----------------
 
-tupleZip :: (a -> b -> c) -> (a, a, a, a) -> (b, b, b, b) -> (c, c, c, c)
-tupleZip f (a1,a2,a3,a4) (b1,b2,b3,b4) = (f a1 b1, f a2 b2, f a3 b3, f a4 b4) 
+xor512 :: Block512 -> Block512 -> Block512
+xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
+   B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4) 
 
-tupleMap :: (a -> b) -> (a, a, a, a) -> (b, b, b, b)
-tupleMap f (a0,a1,a2,a3) = (f a0, f a1, f a2, f a3)
+blockMap :: (Word128 -> Word128) -> Block512 -> Block512
+blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
 
 -------------- Constants -------------------
 
 -- Initial hash values
 jh224_H0 =
-	((0x2dfedd62f99a98acae7cacd619d634e7,0xa4831005bc301216b86038c6c9661494,
-	  0x66d9899f2580706fce9ea31b1d9b1adc,0x11e8325f7b366e10f994857f02fa06c1),
+	(B 0x2dfedd62f99a98acae7cacd619d634e7 0xa4831005bc301216b86038c6c9661494
+	   0x66d9899f2580706fce9ea31b1d9b1adc 0x11e8325f7b366e10f994857f02fa06c1,
 	  
-	 (0x1b4f1b5cd8c840b397f6a17f6e738099,0xdcdf93a5adeaa3d3a431e8dec9539a68,
-	  0x22b4a98aec86a1e4d574ac959ce56cf0,0x15960deab5ab2bbf9611dcf0dd64ea6e))
-
+	 B 0x1b4f1b5cd8c840b397f6a17f6e738099 0xdcdf93a5adeaa3d3a431e8dec9539a68
+	   0x22b4a98aec86a1e4d574ac959ce56cf0 0x15960deab5ab2bbf9611dcf0dd64ea6e)
 
 
 -- Round constants
