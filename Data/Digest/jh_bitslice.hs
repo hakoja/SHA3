@@ -74,7 +74,7 @@ jh224Update ctx bs
    | B.null bs = ctx 
    | otherwise = jh224Update (Ctx parsedDataLen newHashState) rest
    where !parsedDataLen = (dataParsed ctx) + 512
-         !newHashState = f8 (hashState ctx) (parseBlock' pre)
+         !newHashState = f8 (hashState ctx) (parseBlock pre)
          (!pre, rest) = B.splitAt 64 bs
 
 jh224Finalize :: JHContext -> B.ByteString -> JH224Digest
@@ -87,39 +87,42 @@ jh224Finalize ctx bs =
 
 parseMessage :: L.ByteString -> [Block512]
 parseMessage = parseMessage' 0
+   where 
+      parseMessage' n xs 
+         | B.length pre == 64 = parseBlock pre : parseMessage' (n + 512) suf
+         | otherwise          = pad (n + 8 * len pre) pre
+         where (pre,suf) = first rechunk $ L.splitAt 64 xs
+               len = fromIntegral . B.length 
+               rechunk = B.concat . L.toChunks
 
-parseMessage' :: Int64 -> L.ByteString -> [Block512]
-parseMessage' n xs 
-   | B.length pre == 64 = parseBlock' pre : parseMessage' (n + 512) suf
-   | otherwise          = pad (n + 8 * len pre) pre
+
+align :: Int64 -> L.ByteString -> [Block512]
+align dataLen xs
+   | B.length pre == 64 = (parseBlock pre) : align dataLen suf
+   | otherwise          = pad dataLen pre
    where (pre,suf) = first rechunk $ L.splitAt 64 xs
-         len = fromIntegral . B.length 
          rechunk = B.concat . L.toChunks
 
-parseM :: Int64 -> L.ByteString -> [Block512]
-parseM n xs
-   | n `mod` 8 == 0 = parseMessage xs 
-   | otherwise = splitAt (n-1) xs
-   
-
-   
-parseBlock :: L.ByteString -> Block512
-parseBlock = runGet $ liftM4 B parseW128 parseW128 parseW128 parseW128    
-   where parseW128 = liftM2 W getWord64be getWord64be
-
-parseBlock' :: B.ByteString -> Block512
-parseBlock' = stripEither . S.runGet (liftM4 B parseW128 parseW128 parseW128 parseW128)   
+parseBlock :: B.ByteString -> Block512
+parseBlock = stripEither . S.runGet (liftM4 B parseW128 parseW128 parseW128 parseW128)   
    where parseW128 = liftM2 W S.getWord64be S.getWord64be
          stripEither (Left string) = error string
          stripEither (Right block) = block
 
 pad :: Int64 -> B.ByteString -> [Block512]
 pad dataLen bs 
-   | B.null bs = [B (bit 127) 0 0 dataLength]
-   | otherwise = [parseBlock' (B.append bs padding), B 0 0 0 dataLength]
-      where padding = B.cons 0x80 zeroes
-            zeroes = B.replicate (63 - B.length bs) 0x00
-            dataLength = fromIntegral dataLen
+   | B.null bs || dataLen `mod` 512 == 0 = [B (bit 127) 0 0 dataLength]
+   | partialBlockLen < 128 = [B (setBit a bitIndex) b c d, B 0 0 0 dataLength]
+   | partialBlockLen < 256 = [B a (setBit b bitIndex) c d, B 0 0 0 dataLength]
+   | partialBlockLen < 384 = [B a b (setBit c bitIndex) d, B 0 0 0 dataLength]
+   | partialBlockLen < 512 = [B a b c (setBit d bitIndex), B 0 0 0 dataLength]
+   where 
+         (B a b c d) = parseBlock (B.append bs zeroes)
+         zeroes = B.replicate 64 0x00
+         bitIndex = fromIntegral $ 127 - (dataLen `mod` 128)
+         dataLength = fromIntegral dataLen
+         partialBlockLen = B.length bs * 8
+
 
 --------------------- testing ------------------
 printDigest :: L.ByteString -> String
