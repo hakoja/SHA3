@@ -1,15 +1,15 @@
+{-# OPTIONS_GHC -Wall #-}
 
 module Data.Digest.JHInternal where 
 
 import Data.Bits
-import Data.Word (Word64)
 import Data.Int (Int64)
 import Data.List (foldl')
 import Data.Array 
 import Data.Serialize
 import qualified Data.ByteString.Lazy as L 
 import qualified Data.ByteString as B
-import Control.Monad (liftM, liftM2, liftM4)
+import Control.Monad (liftM2, liftM4)
 import Control.Arrow (first, second)
 import Text.Printf (printf)
 import Prelude hiding (truncate)
@@ -127,22 +127,12 @@ blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
 
--------------------- Parsing and padding of a message -------------
+-------------------- Parsing, padding and truncating of a message -------------
 
-parseMessage :: L.ByteString -> [Block512]
-parseMessage = go 0
-   where 
-      go n xs 
-         | B.length pre == 64 = parseBlock pre : go (n + 512) suf
-         | otherwise          = pad (n + 8 * len pre) pre
-         where (pre,suf) = first rechunk $ L.splitAt 64 xs
-               len = fromIntegral . B.length 
-               rechunk = B.concat . L.toChunks
-
-parseMessage' :: Int64 -> L.ByteString -> [Block512]
-parseMessage' dataLen xs
+parseMessage :: Int64 -> L.ByteString -> [Block512]
+parseMessage dataLen xs
    | L.null suf   = pad dataLen pre
-   | otherwise    = (parseBlock pre) : parseMessage' dataLen suf
+   | otherwise    = (parseBlock pre) : parseMessage dataLen suf
    where (pre,suf) = first rechunk $ L.splitAt 64 xs
          rechunk = B.concat . L.toChunks
 
@@ -154,7 +144,7 @@ parseBlock = stripEither . runGet (liftM4 B parseW128 parseW128 parseW128 parseW
 
 pad :: Int64 -> B.ByteString -> [Block512]
 pad dataLen bs 
-   | B.null bs || dataLen == 0  = [B (bit 127) 0 0 0]
+   | B.null bs || dataLen == 0  = [B (bit 127) 0 0 dataLength]
    | partialBlockLen == 0  = [fullBlock, B (bit 127) 0 0 dataLength]
    | partialBlockLen < 128 = [B (setBit a bitIndex) b c d, B 0 0 0 dataLength]
    | partialBlockLen < 256 = [B a (setBit b bitIndex) c d, B 0 0 0 dataLength]

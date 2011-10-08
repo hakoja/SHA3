@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Data.BigWord.Word128 (
 			Word128(..),

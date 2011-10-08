@@ -1,6 +1,8 @@
+
 .ghci
 *~
 *.o
+*.hi
 
 Data/Digest/jh_bitslice.hs~
 Data/Digest/jh_bitslice.hs~
