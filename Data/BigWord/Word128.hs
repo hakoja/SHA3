@@ -7,7 +7,8 @@ module Data.BigWord.Word128 (
 
 import Data.Bits
 import Data.Word (Word64)	
-import Data.Binary
+import qualified Data.Binary as B
+import qualified Data.Serialize as S
 import Control.Monad (liftM2)
 		
 
@@ -75,6 +76,12 @@ word128Rotate x n
 
 ---------------------- Binary instance ---------------------
 
-instance Binary Word128 where
-   put (W h l) = put h >> put l
-   get         = liftM2 W get get
+instance B.Binary Word128 where
+   put (W h l) = B.put h >> B.put l
+   get         = liftM2 W B.get B.get
+   
+--------------------- Serialize instance -------------------
+
+instance S.Serialize Word128 where
+   put (W h l) = S.put h >> S.put l
+   get         = liftM2 W S.get S.get

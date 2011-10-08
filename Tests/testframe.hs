@@ -1,3 +1,7 @@
+
+module Tests.Testframe where 
+         
+
 import Test.HUnit
 import qualified Data.ByteString.Lazy as L
 import Text.ParserCombinators.Parsec
@@ -5,10 +9,15 @@ import Control.Applicative ((*>),(<*),(<*>),(<$>),liftA3,liftA)
 import System.IO
 import Data.Word (Word8)
 import Control.Monad (void)
+import Data.Int (Int64)
+import Text.Printf (printf)
+
+import Data.Digest.JH224
 
 -- The hash function to test. 
-hashFunc :: L.ByteString -> L.ByteString
-hashFunc _ = L.pack constVector
+hashFunc :: Int64 -> L.ByteString -> L.ByteString
+hashFunc = jh224
+--hashFunc _ = L.pack constVector
 --hashFunc = skein
 --hashFunc = keccack
 
@@ -19,35 +28,41 @@ constVector = [0x2C,0x99,0xDF,0x88,0x9B,0x01,0x93,0x09,0x05,0x1C,
 
 main :: IO ()
 main = do 
-   file <- readFile "./testvectors/jh/KAT_MCT/ShortMsgKAT_224.txt"
-   let p_result = parse p_testFile "ShortMsgKAT_224.txt" file
+   file <- readFile "./Tests/testvectors/jh/KAT_MCT/ShortMsgKAT_224.txt"
+   let p_result = parse p_KATFile "ShortMsgKAT_224.txt" file
    case p_result of  
       Left parseError -> putStrLn (show parseError)
-      Right testFile -> void . runTestTT $ tf2Test testFile
+      Right testFile -> do 
+                           let tests = tf2Test testFile
+                           --putStrLn . show $ testFile
+                           void . runTestTT $ tf2Test testFile
 
 
 ----------------------------- Create a test suite --------------------------
 
-tf2Test :: TestFile -> Test
+tf2Test :: KATFile -> Test
 tf2Test tf = let fHeader = header tf
              in TestLabel ("File: " ++ (fName fHeader) ++
                            " Algorithm: " ++ (algName fHeader))
                           (tf2TestList tf)
 
-tf2TestList :: TestFile -> Test
-tf2TestList = TestList . map ti2TestCase . testInstances
+tf2TestList :: KATFile -> Test
+tf2TestList = TestList . map kat2TestCase . kats
 
-ti2TestCase :: TestInstance -> Test
-ti2TestCase ti = TestCase $ 
-   assertEqual ("Len = " ++ (show $ len ti)) (digest ti) (hashFunc undefined)
+kat2TestCase :: KAT -> Test
+kat2TestCase ti = TestCase $ 
+   assertEqual ("Len = " ++ (show dataLen)) expectedDigest (hashFunc dataLen message)
+   where dataLen = len ti 
+         expectedDigest = digest ti
+         message = msg ti
 
 
------------------------------ Parse test vector files --------------------------
 
+---------------------------- Some types for specifying tests -----------
 
-data TestFile = TestFile {
+data KATFile = KATFile {
          header :: Header,
-         testInstances :: [TestInstance]
+         kats :: [KAT]
       } deriving (Show)
 
 data Header = Header {
@@ -55,15 +70,20 @@ data Header = Header {
          algName :: String
       } deriving (Show)
 
-data TestInstance = TI {
-         len :: Int,
+data KAT = KAT {
+         len :: Int64,
          msg :: L.ByteString,
          digest :: L.ByteString
-      } deriving (Show)
-      
-p_testFile :: GenParser Char st TestFile
-p_testFile = TestFile <$> 
-   (p_header <* newline) <*> (sepEndBy p_testInstance newline)
+      }
+
+instance Show KAT where 
+   show (KAT dataLen msg _) = show (dataLen, printAsHex $ L.take 5 msg) 
+
+----------------------------- Parse test vector files --------------------------
+  
+p_KATFile :: GenParser Char st KATFile
+p_KATFile = KATFile <$> 
+   (p_header <* newline) <*> (endBy p_KAT (optional newline))
 
 p_header :: GenParser Char st Header
 p_header = do
@@ -72,8 +92,8 @@ p_header = do
    manyTill anyChar newline
    return $ Header tfn alg
 
-p_testInstance :: GenParser Char st TestInstance
-p_testInstance = liftA3 TI len msg digest
+p_KAT :: GenParser Char st KAT
+p_KAT = liftA3 KAT len msg digest
    where len = p "Len = " read digit
          msg = p "Msg = " L.pack p_hexNumber
          digest = p "MD = " L.pack p_hexNumber
@@ -82,18 +102,5 @@ p_testInstance = liftA3 TI len msg digest
 p_hexNumber :: GenParser Char st Word8
 p_hexNumber = read . ("0x" ++) <$> count 2 hexDigit
 
-      
-      
-      
-
-      
-      
-      
-      
-      
-      
-      
-  
-  
-  
-  
+printAsHex :: L.ByteString -> String
+printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
