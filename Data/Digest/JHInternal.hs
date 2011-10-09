@@ -127,6 +127,9 @@ blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
 
+printAsHex' :: B.ByteString -> String
+printAsHex' = concat . ("0x" :) . map (printf "%02x") . B.unpack
+
 -------------------- Parsing, padding and truncating of a message -------------
 
 parseMessage :: Int64 -> L.ByteString -> [Block512]

@@ -3,12 +3,13 @@
 
 module Data.Digest.JH224 (
          jh224,
-         JH224Digest,
+         JH224Digest(..),
+         JHContext (..),
          
          Hash(..),
          hash,
-         hash',
-         JHContext (..)
+         hash'
+
       ) where
 
 import qualified Data.ByteString as B
@@ -20,7 +21,8 @@ import Control.Monad (liftM)
 import Data.Serialize
 import Crypto.Classes 
 import Data.Tagged
-import Control.Arrow
+import Control.Arrow ((***))
+import System.Environment (getArgs)
 
 import Data.Digest.JHInternal
 

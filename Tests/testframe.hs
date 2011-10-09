@@ -1,63 +1,60 @@
-{-# OPTIONS_GHC -Wall #-}
 
 module Tests.Testframe where 
          
 
 import Test.HUnit
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString as B
 import Text.ParserCombinators.Parsec
-import Control.Applicative ((*>),(<*),(<*>),(<$>),liftA3,liftA)
-import System.IO
+import Control.Applicative ((*>),(<*),(<*>),(<$>))
 import Data.Word (Word8)
 import Control.Monad (void)
 import Data.Int (Int64)
 import Text.Printf (printf)
+import System.FilePath ((</>))
+
 
 import Data.Digest.JH224
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
 hashFunc = jh224
---hashFunc _ = L.pack constVector
 --hashFunc = skein
 --hashFunc = keccack
 
 
-constVector = [0x2C,0x99,0xDF,0x88,0x9B,0x01,0x93,0x09,0x05,0x1C,
-               0x60,0xFE,0xCC,0x2B,0xD2,0x85,0xA7,0x74,0x94,0x0E,
-               0x43,0x17,0x5B,0x76,0xB2,0x62,0x66,0x30]
 
-main :: IO ()
-main = do 
-   file <- readFile "./Tests/testvectors/jh/KAT_MCT/ShortMsgKAT_224.txt"
-   let p_result = parse p_KATFile "ShortMsgKAT_224.txt" file
-   case p_result of  
-      Left parseError -> putStrLn (show parseError)
-      Right testFile -> do 
-                           let tests = tf2Test testFile
-                           --putStrLn . show $ testFile
-                           void . runTestTT $ tf2Test testFile
+run :: String -> FilePath -> Bool -> IO ()
+run alg testFile byteAligned = do 
+      file <- readFile $ "./Tests/KAT_MCT" </> alg </> testFile
+      let p_result = parse p_KATFile testFile file
+      case p_result of  
+         Left parseError -> putStrLn (show parseError)
+         Right katFile -> void . runTestTT $ makeTests byteAligned katFile
 
 
 ----------------------------- Create a test suite --------------------------
 
-tf2Test :: KATFile -> Test
-tf2Test tf = let fHeader = header tf
-             in TestLabel ("File: " ++ (fName fHeader) ++
-                           " Algorithm: " ++ (algName fHeader))
-                          (tf2TestList tf)
+makeTests :: Bool -> KATFile -> Test
+makeTests True    = TestList . map makeAlignedTest . dropUnaligned . kats
+makeTests False   = TestList . map makeUnalignedTest . kats 
 
-tf2TestList :: KATFile -> Test
-tf2TestList = TestList . map kat2TestCase . kats
+dropUnaligned :: [KAT] -> [KAT]
+dropUnaligned = filter (\(KAT len _ _) -> len `mod` 8 == 0)
 
-kat2TestCase :: KAT -> Test
-kat2TestCase ti = TestCase $ 
-   assertEqual ("Len = " ++ (show dataLen)) expectedDigest (hashFunc dataLen message)
-   where dataLen = len ti 
-         expectedDigest = digest ti
-         message = msg ti
+makeAlignedTest :: KAT -> Test
+makeAlignedTest kat = 
+   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (hash message)
+      where dataLen = len kat
+            expectedDigest = Digest $ digest kat
+            message = msg kat
 
-
+makeUnalignedTest :: KAT -> Test
+makeUnalignedTest kat = 
+   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (hashFunc dataLen message)
+      where dataLen = len kat
+            expectedDigest = digest kat
+            message = msg kat
 
 ---------------------------- Some types for specifying tests -----------
 
@@ -94,10 +91,11 @@ p_header = do
    return $ Header tfn alg
 
 p_KAT :: GenParser Char st KAT
-p_KAT = liftA3 KAT len msg digest
-   where len = p "Len = " read digit
-         msg = p "Msg = " L.pack p_hexNumber
-         digest = p "MD = " L.pack p_hexNumber
+p_KAT = do  len <- p "Len = " read digit
+            msg <- p "Msg = " (if len == 0 then \_ -> L.empty else L.pack) p_hexNumber
+            digest <- p "MD = " L.pack p_hexNumber
+            return $ KAT len msg digest   
+        where 
          p prefix reader format = reader <$> (string prefix *> manyTill format newline)
 
 p_hexNumber :: GenParser Char st Word8
