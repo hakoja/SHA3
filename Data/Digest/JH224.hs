@@ -22,7 +22,6 @@ import Data.Serialize
 import Crypto.Classes 
 import Data.Tagged
 import Control.Arrow ((***))
-import System.Environment (getArgs)
 
 import Data.Digest.JHInternal
 
@@ -68,7 +67,7 @@ jh224Update ctx bs
    | B.null  bs = ctx
    | otherwise  = result
    where 
-   (!newState, result) = foldUpdate . B.splitAt 64 $ bs
+   (newState, result) = foldUpdate . B.splitAt 64 $ bs
    foldUpdate = hashBlock *** jh224Update newCtx
    hashBlock = f8 (hashState ctx) . parseBlock
    newCtx = Ctx (dataParsed ctx + 512) newState      
@@ -77,4 +76,4 @@ jh224Finalize :: JHContext -> B.ByteString -> JH224Digest
 jh224Finalize ctx bs = 
    Digest . truncate JH224 . foldl' f8 prevState $ pad n bs
       where !n = dataParsed ctx + (fromIntegral $ B.length bs * 8)
-            !prevState = hashState ctx 
+            prevState = hashState ctx 

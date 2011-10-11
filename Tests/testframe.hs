@@ -4,6 +4,7 @@ module Tests.Testframe where
 
 import Test.HUnit
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.ByteString as B
 import Text.ParserCombinators.Parsec
 import Control.Applicative ((*>),(<*),(<*>),(<$>))
@@ -22,7 +23,9 @@ hashFunc = jh224
 --hashFunc = skein
 --hashFunc = keccack
 
-
+runExtreme :: IO ()
+runExtreme = 
+   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hash extreme224)
 
 run :: String -> FilePath -> Bool -> IO ()
 run alg testFile byteAligned = do 
@@ -103,3 +106,15 @@ p_hexNumber = read . ("0x" ++) <$> count 2 hexDigit
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
+
+readAsHex :: String -> L.ByteString
+readAsHex = L.pack . map (read . ("0x"++)) . take2
+
+take2 :: [a] -> [[a]]
+take2 (a:b:rest) = [a,b] : take2 rest
+take2 _          = []
+
+extreme224 :: L.ByteString
+extreme224 = L.take (64 * 100000) . L.cycle $ C.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+
+expectedExtreme = Digest $ readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB213E5C95D4"
