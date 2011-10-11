@@ -23,9 +23,13 @@ hashFunc = jh224
 --hashFunc = skein
 --hashFunc = keccack
 
-runExtreme :: IO ()
-runExtreme = 
-   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hash extreme224)
+xLength = 500000 * 64 --16777216 * 64
+
+runExtreme :: Bool -> IO ()
+--runExtreme False = 
+--   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hashFunc xLength extreme224)
+runExtreme True = 
+   void . runTestTT . TestCase $ assertEqual "Extremely long" (Digest expectedExtreme) (hash extreme224) 
 
 run :: String -> FilePath -> Bool -> IO ()
 run alg testFile byteAligned = do 
@@ -115,6 +119,6 @@ take2 (a:b:rest) = [a,b] : take2 rest
 take2 _          = []
 
 extreme224 :: L.ByteString
-extreme224 = L.take (64 * 100000) . L.cycle $ C.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+extreme224 = L.take xLength . L.cycle $ C.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
 
-expectedExtreme = Digest $ readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB213E5C95D4"
+expectedExtreme = readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB213E5C95D4"

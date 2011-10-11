@@ -10,7 +10,7 @@ module Data.Digest.JH224 (
          hash,
          hash'
 
-      ) where
+      )  where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L

@@ -3,6 +3,8 @@
 *~
 *.o
 *.hi
-
-Data/Digest/jh_bitslice.hs~
-Data/Digest/jh_bitslice.hs~
+*.ps
+*.prof
+*.exe
+*.hp
+*.aux

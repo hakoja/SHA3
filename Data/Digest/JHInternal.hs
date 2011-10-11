@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Data.Digest.JHInternal where 
 
@@ -33,7 +34,7 @@ data Parity = Even | Odd
 ---------------- The bitslice implementation of the JH algorithm ---------------
 
 f8 :: Block1024 -> Block512 -> Block1024
-f8 h m = second (m `xor512`) . e8  . first (m `xor512`) $ h
+f8 (!hh,!hl) m = second (m `xor512`) . e8  . first (m `xor512`) $ (hh,hl)
 
 e8 :: Block1024 -> Block1024
 e8 hs = foldl' roundFunction hs [0..41] 
@@ -50,30 +51,30 @@ roundFunction (B a0 a1 a2 a3, B a4 a5 a6 a7) roundNr =
 
 sbox :: Block512 -> Word128 -> Block512
 sbox (B a0 a1 a2 a3) c = 
-   let b3   = complement a3                        --1
-       b0   = a0 	`xor` (c .&. (complement a2))    --2
-       t    = c   `xor` (b0 .&. a1)             	--3
-       b0'  = b0  `xor` (a2 .&. b3)             	--4
-       b3'  = b3  `xor` ((complement a1) .&. a2)  	--5
-       b1   = a1  `xor` (b0' .&. a2)            	--6
-       b2   = a2  `xor` (b0' .&. (complement b3'))	--7
-       b0'' = b0' `xor` (b1 .|. b3')            	--8
-       b3'' = b3' `xor` (b1 .&. b2)             	--9
-       b1'  = b1  `xor` (t .&. b0'')           	 	--10
-       b2'  = b2  `xor`t                        	--11
+   let !b3   = complement a3                        --1
+       !b0   = a0 	`xor` (c .&. (complement a2))    --2
+       !t    = c   `xor` (b0 .&. a1)             	--3
+       !b0'  = b0  `xor` (a2 .&. b3)             	--4
+       !b3'  = b3  `xor` ((complement a1) .&. a2)  	--5
+       !b1   = a1  `xor` (b0' .&. a2)            	--6
+       !b2   = a2  `xor` (b0' .&. (complement b3'))	--7
+       !b0'' = b0' `xor` (b1 .|. b3')            	--8
+       !b3'' = b3' `xor` (b1 .&. b2)             	--9
+       !b1'  = b1  `xor` (t .&. b0'')           	 	--10
+       !b2'  = b2  `xor`t                        	--11
    in B b0'' b1' b2' b3''
 
 
 linearTransform :: Block1024 -> Block1024
 linearTransform (B a0 a1 a2 a3, B a4 a5 a6 a7) =
-   let b4 = a4 `xor` a1
-       b5 = a5 `xor` a2
-       b6 = a6 `xor` a3 `xor` a0
-       b7 = a7 `xor` a0
-       b0 = a0 `xor` b5
-       b1 = a1 `xor` b6
-       b2 = a2 `xor` b7 `xor` b4
-       b3 = a3 `xor` b4
+   let !b4 = a4 `xor` a1
+       !b5 = a5 `xor` a2
+       !b6 = a6 `xor` a3 `xor` a0
+       !b7 = a7 `xor` a0
+       !b0 = a0 `xor` b5
+       !b1 = a1 `xor` b6
+       !b2 = a2 `xor` b7 `xor` b4
+       !b3 = a3 `xor` b4
    in (B b0 b1 b2 b3, B b4 b5 b6 b7)
 
 swap :: Int -> Word128 -> Word128
@@ -135,13 +136,13 @@ printAsHex' = concat . ("0x" :) . map (printf "%02x") . B.unpack
 parseMessage :: Int64 -> L.ByteString -> [Block512]
 parseMessage dataLen xs
    | L.null suf   = pad dataLen pre
-   | otherwise    = (parseBlock pre) : parseMessage dataLen suf
-   where (pre,suf) = first rechunk $ L.splitAt 64 xs
+   | otherwise    = parseBlock pre : parseMessage dataLen suf
+   where (!pre,suf) = first rechunk $ L.splitAt 64 xs
          rechunk = B.concat . L.toChunks
 
 parseBlock :: B.ByteString -> Block512
 parseBlock = stripEither . runGet (liftM4 B parseW128 parseW128 parseW128 parseW128)   
-   where parseW128 = liftM2 W getWord64be getWord64be
+   where !parseW128 = liftM2 W getWord64be getWord64be
          stripEither (Left string) = error string
          stripEither (Right block) = block
 

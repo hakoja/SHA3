@@ -50,9 +50,6 @@ word128Times :: Word128 -> Word128 -> Word128
        product = (xl' + xh') * (yl' + yh')
    in W (fromIntegral $ shiftR product 64) (fromIntegral product)
 
-word128Abs :: Word128 -> Word128
-word128Abs = id
-
 -------------------------- Bits instance --------------------
 
 instance Bits Word128 where
