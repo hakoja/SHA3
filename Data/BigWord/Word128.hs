@@ -63,6 +63,7 @@ instance Bits Word128 where
    isSigned _              = False
 	   
 word128Shift :: Word128 -> Int -> Word128
+{-# INLINE word128Shift #-}
 word128Shift (W xh xl) n 
    | n >= 0       = W ((shiftL xh n) .|. (shiftR xl (64 - n))) (shiftL xl n)
    | otherwise    = W (shiftR xh (-n)) ((shiftR xl (-n)) .|. (shiftL xh (64 + n)))

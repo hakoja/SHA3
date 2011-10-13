@@ -23,11 +23,12 @@ hashFunc = jh224
 --hashFunc = skein
 --hashFunc = keccack
 
-xLength = 500000 * 64 --16777216 * 64
+xLength = 500000 * 64
+--xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
---runExtreme False = 
---   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hashFunc xLength extreme224)
+runExtreme False = 
+   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hashFunc (8 * xLength) extreme224)
 runExtreme True = 
    void . runTestTT . TestCase $ assertEqual "Extremely long" (Digest expectedExtreme) (hash extreme224) 
 
