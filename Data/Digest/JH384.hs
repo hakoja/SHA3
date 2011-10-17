@@ -26,7 +26,9 @@ import Prelude hiding (truncate)
 import Data.Digest.JHInternal
 
 jh384 :: Int64 -> L.ByteString -> L.ByteString
-jh384 dataBitLen = truncate JH384 . foldl' f8 jh384_h0 . parseMessage dataBitLen
+jh384 dataBitLen
+	| dataBitLen < 0 = error "The data length can not be less than 0"
+	| otherwise 	 = truncate JH384 . foldl' f8 jh384_h0 . parseMessage dataBitLen
 
 ---------------------- Crypto-api instance -------------
 

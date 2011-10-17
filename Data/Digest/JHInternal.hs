@@ -1,7 +1,26 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE BangPatterns #-}
 
-module Data.Digest.JHInternal where 
+module Data.Digest.JHInternal (
+			Block1024,
+			Block512 (..),
+			DigestLength (..),
+
+			f8,
+			parseMessage,
+			parseBlock,
+			pad,
+			truncate,
+			
+			JHContext (..),
+			jhInit,
+			jhUpdate,
+			jhFinalize,
+			
+			printAsHex,
+			printAsHex'
+			
+		) where 
 
 import Data.Bits
 import Data.Int (Int64)
@@ -23,7 +42,7 @@ import Data.BigWord.Word128
 type Block1024 = (Block512, Block512)
 
 data Block512 = B {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
-						{-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
+				  {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
    deriving (Eq,Ord,Show)
 
 data DigestLength = JH224 | JH256 | JH384 | JH512
@@ -38,7 +57,7 @@ f8 :: Block1024 -> Block512 -> Block1024
 f8 (!hh,!hl) m = second (m `xor512`) . e8  . first (m `xor512`) $ (hh,hl)
 
 e8 :: Block1024 -> Block1024
-e8 hs@(!hh, !hl) = foldl' roundFunction hs [0..41] 
+e8 (!hh, !hl) = foldl' roundFunction (hh,hl) [0..41] 
 
 roundFunction :: Block1024 -> Int -> Block1024
 roundFunction (B a0 a1 a2 a3, B a4 a5 a6 a7) roundNr = 
@@ -53,17 +72,17 @@ roundFunction (B a0 a1 a2 a3, B a4 a5 a6 a7) roundNr =
 {-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512
 sbox (B a0 a1 a2 a3) c = 
-   let !b3   = complement a3                        --1
-       !b0   = a0 	`xor` (c .&. (complement a2))    --2
+   let !b3   = complement a3                      	--1
+       !b0   = a0  `xor` (c .&. (complement a2))  	--2
        !t    = c   `xor` (b0 .&. a1)             	--3
        !b0'  = b0  `xor` (a2 .&. b3)             	--4
-       !b3'  = b3  `xor` ((complement a1) .&. a2)  	--5
-       !b1   = a1  `xor` (b0' .&. a2)            	--6
+       !b3'  = b3  `xor` ((complement a1) .&. a2)	--5
+       !b1   = a1  `xor` (b0' .&. a2)          		--6
        !b2   = a2  `xor` (b0' .&. (complement b3'))	--7
        !b0'' = b0' `xor` (b1 .|. b3')            	--8
        !b3'' = b3' `xor` (b1 .&. b2)             	--9
-       !b1'  = b1  `xor` (t .&. b0'')           	 	--10
-       !b2'  = b2  `xor`t                        	--11
+       !b1'  = b1  `xor` (t .&. b0'')           	--10
+       !b2'  = b2  `xor` t                        	--11
    in B b0'' b1' b2' b3''
 
 
@@ -176,7 +195,7 @@ pad dataLen bs
 
 truncate :: DigestLength -> Block1024 -> L.ByteString
 truncate JH224 (_,(B _ _ x6 x7))   = L.append (L.drop 4 $ encodeLazy x6) (encodeLazy x7)
-truncate JH256 (_,(B _ _ x6 x7))   = L.append (encodeLazy x6) (encodeLazy x7)
+truncate JH256 (_,(B _ _ x6 x7))   = L.concat $ map encodeLazy [x6,x7]
 truncate JH384 (_,(B _ x5 x6 x7))  = L.concat $ map encodeLazy [x5,x6,x7]
 truncate JH512 (_,(B x4 x5 x6 x7)) = L.concat $ map encodeLazy [x4,x5,x6,x7]
 
@@ -186,7 +205,7 @@ data JHContext = Ctx {
             dataParsed :: !Int64,
             digestLength :: DigestLength,
             hashState :: !Block1024
-         }
+		}
 
 jhInit :: DigestLength -> Block1024 -> JHContext
 jhInit dLen h0 = Ctx {dataParsed = 0, digestLength = dLen, hashState = h0}
