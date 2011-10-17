@@ -1,0 +1,10 @@
+
+.ghci
+*~
+*.o
+*.hi
+*.ps
+*.prof
+*.exe
+*.hp
+*.aux
