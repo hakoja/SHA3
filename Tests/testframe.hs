@@ -31,9 +31,9 @@ xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
 runExtreme False = 
-   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme (hashFunc (8 * xLength) extreme224)
+   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme512 (hashFunc (8 * xLength) extreme)
 runExtreme True = 
-   void . runTestTT . TestCase $ assertEqual "Extremely long" (JH512.Digest expectedExtreme) (JH512.hash extreme224) 
+   void . runTestTT . TestCase $ assertEqual "Extremely long" (JH512.Digest expectedExtreme512) (JH512.hash extreme) 
 
 run :: String -> FilePath -> Bool -> IO ()
 run alg testFile byteAligned = do 
@@ -122,7 +122,11 @@ take2 :: [a] -> [[a]]
 take2 (a:b:rest) = [a,b] : take2 rest
 take2 _          = []
 
-extreme224 :: L.ByteString
-extreme224 = L.take xLength . L.cycle $ C.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+extreme :: L.ByteString
+extreme = L.take xLength . L.cycle $ C.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
 
-expectedExtreme = readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB213E5C95D4"
+expectedExtreme224 = readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB213E5C95D4"
+expectedExtreme256 = readAsHex "58FFBDE520764DFC03B29598ACD70655BB2C245A3D73FDD6EB9E1BC221AF579B"
+expectedExtreme384 = readAsHex "836EC726CA5280BBC490A25389D1F507CECED047E9E3DAF0ED3DAA5D9AEDE2DDA89C8B7995F7855A3354AFBFFF1B4935"
+expectedExtreme512 = readAsHex "A3053657024A43187CF8C1C82194D5D944A7408EE3B584801309292DEFF8080F88183B5642318456C7C05998C9A70D0F784E4C42D9EBCBA7F2CA25B3FBDE2CE5"
+
