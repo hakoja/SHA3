@@ -3,22 +3,22 @@
 {-# OPTIONS -fno-warn-name-shadowing #-}
 
 module Data.BigWord.Word128 (
-			Word128(..),
-			w128toInteger
-		) where
+            Word128(..),
+            w128toInteger
+        ) where
 
 import Data.Bits
 import Data.Word (Word64)	
 import qualified Data.Binary as B
 import qualified Data.Serialize as S
 import Control.Monad (liftM2)
-		
+        
 
 
 -- an unsigned 128 bit word. 
 -- given x = W a b; then a represents the 64 MSB, and b the 64 LSB
 data Word128 = W !Word64 !Word64
-	deriving (Show, Eq, Ord) 
+    deriving (Show, Eq, Ord) 
 
 w128toInteger :: Word128 -> Integer
 w128toInteger (W h l) = shiftL (toInteger h) 64 + (toInteger l)
@@ -54,15 +54,15 @@ word128Times :: Word128 -> Word128 -> Word128
 -------------------------- Bits instance --------------------
 
 instance Bits Word128 where
-   (W xh xl) .&. (W yh yl)     = W (xh .&. yh) (xl .&. yl)
-   (W xh xl) .|. (W yh yl)      = W (xh .|. yh) (xl .|. yl)
-   (W xh xl) `xor` (W yh yl)    = W (xh `xor` yh) (xl `xor` yl)
+   (W xh xl) .&. (W yh yl)   = W (xh .&. yh) (xl .&. yl)
+   (W xh xl) .|. (W yh yl)   = W (xh .|. yh) (xl .|. yl)
+   (W xh xl) `xor` (W yh yl) = W (xh `xor` yh) (xl `xor` yl)
    complement (W xh xl)      = W (complement xh) (complement xl)
-   shift                   = word128Shift
-   rotate                  = word128Rotate
-   bitSize _               = 128
-   isSigned _              = False
-	   
+   shift                     = word128Shift
+   rotate                    = word128Rotate
+   bitSize _                 = 128
+   isSigned _                = False
+       
 word128Shift :: Word128 -> Int -> Word128
 {-# INLINE word128Shift #-}
 word128Shift (W xh xl) n 

@@ -2,25 +2,25 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Data.Digest.JHInternal (
-			Block1024,
-			Block512 (..),
-			DigestLength (..),
+            Block1024,
+            Block512 (..),
+            DigestLength (..),
 
-			f8,
-			parseMessage,
-			parseBlock,
-			pad,
-			truncate,
-			
-			JHContext (..),
-			jhInit,
-			jhUpdate,
-			jhFinalize,
-			
-			printAsHex,
-			printAsHex'
-			
-		) where 
+            f8,
+            parseMessage,
+            parseBlock,
+            pad,
+            truncate,
+            
+            JHContext (..),
+            jhInit,
+            jhUpdate,
+            jhFinalize,
+            
+            printAsHex,
+            printAsHex'
+            
+        ) where 
 
 import Data.Bits
 import Data.Int (Int64)
@@ -42,7 +42,7 @@ import Data.BigWord.Word128
 type Block1024 = (Block512, Block512)
 
 data Block512 = B {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
-				  {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
+                  {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
    deriving (Eq,Ord,Show)
 
 data DigestLength = JH224 | JH256 | JH384 | JH512
@@ -205,7 +205,7 @@ data JHContext = Ctx {
             dataParsed :: !Int64,
             digestLength :: DigestLength,
             hashState :: !Block1024
-		}
+        }
 
 jhInit :: DigestLength -> Block1024 -> JHContext
 jhInit dLen h0 = Ctx {dataParsed = 0, digestLength = dLen, hashState = h0}

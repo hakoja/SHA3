@@ -2,15 +2,15 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Data.Digest.JH224 (
-         jh224,
-         JH224Digest(..),
-         JHContext (..),
-         
-         Hash(..),
-         hash,
-         hash'
+            jh224,
+            JH224Digest(..),
+            JHContext (..),
+            
+            Hash(..),
+            hash,
+            hash'
 
-      )  where
+        )  where
 
 
 import qualified Data.ByteString.Lazy as L
@@ -27,27 +27,27 @@ import Data.Digest.JHInternal
 
 jh224 :: Int64 -> L.ByteString -> L.ByteString
 jh224 dataBitLen 
-	| dataBitLen < 0 = error "The data length can not be less than 0"
-	| otherwise 	 = truncate JH224 . foldl' f8 jh224_h0 . parseMessage dataBitLen
+    | dataBitLen < 0 = error "The data length can not be less than 0"
+    | otherwise      = truncate JH224 . foldl' f8 jh224_h0 . parseMessage dataBitLen
 
 ---------------------- Crypto-api instance -------------
 
 instance Hash JHContext JH224Digest where 
-   outputLength = Tagged 224
-   blockLength  = Tagged 512
-   initialCtx   = jhInit JH224 jh224_h0
-   updateCtx    = jhUpdate
-   finalize ctx = Digest . jhFinalize ctx
+    outputLength = Tagged 224
+    blockLength  = Tagged 512
+    initialCtx   = jhInit JH224 jh224_h0
+    updateCtx    = jhUpdate
+    finalize ctx = Digest . jhFinalize ctx
 
 data JH224Digest = Digest L.ByteString
-	deriving (Eq,Ord)
+    deriving (Eq,Ord)
 
 instance Show JH224Digest where
-   show (Digest h) = printAsHex h
+    show (Digest h) = printAsHex h
 
 instance Serialize JH224Digest where
-   put (Digest bs) = put bs
-   get = liftM Digest get
+    put (Digest bs) = put bs
+    get = liftM Digest get
 
 --------------------- Initial hash value -----------------
 jh224_h0 :: Block1024
