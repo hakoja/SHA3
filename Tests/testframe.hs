@@ -29,8 +29,8 @@ cryptoAPIDigest = JH224.Digest
 cryptoAPIHash = JH224.hash
 
 --xLength = 100000 * 64
---xLength = 1000000 * 64
-xLength = 16777216 * 64
+xLength = 1000000 * 64
+--xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
 runExtreme False = 

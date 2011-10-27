@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, TypeFamilies, MultiParamTypeClasses #-}
---{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 
 module Data.BigWord.Word128 (

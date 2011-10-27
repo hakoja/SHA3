@@ -1,10 +1,9 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE BangPatterns, TypeFamilies, MultiParamTypeClasses #-}
 
-module Data.Digest.JHInternal
-{-
- (
-            Block1024,
+module Data.Digest.JHInternal (
+
+            Block1024 (..),
             Block512 (..),
             DigestLength (..),
 
@@ -21,10 +20,7 @@ module Data.Digest.JHInternal
             
             printAsHex,
             printAsHex'
-            
-) 
--}
-where 
+       ) where 
 
 import Data.Bits
 import Data.Int (Int64)
@@ -42,7 +38,6 @@ import Data.BigWord.Word128
 
 --------------------- Data types for the algorithm -----------------
 
---type Block1024 = (Block512,Block512)
 data Block1024 = B1024 {-# UNPACK #-} !Block512 {-# UNPACK #-} !Block512
 
 data Block512 = B {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
@@ -57,7 +52,7 @@ data DigestLength = JH224 | JH256 | JH384 | JH512
 f8 :: Block1024 -> Block512 -> Block1024
 f8 (B1024 hh hl) !m = let B1024 bh bl = e8  (B1024 (m `xor512` hh) hl)
                       in B1024 bh (m `xor512` bl) 
-
+--{-# INLINE e8 #-}
 e8 :: Block1024 -> Block1024
 e8 !h = U.foldl' roundFunction h (U.enumFromN 0 42) 
 {-
@@ -68,7 +63,7 @@ e8 !h = go h 0
            where !h' = roundFunction x n
 -}
 
---{-# INLINE roundFunction #-}
+{-# INLINE roundFunction #-}
 roundFunction :: Block1024 -> Int -> Block1024
 roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr = 
    let r = roundNr `mod` 7
@@ -79,7 +74,7 @@ roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr =
    in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
 
 
---{-# INLINE sbox #-} 
+{-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512
 sbox (B a0 a1 a2 a3) c = 
    let !b3   = complement a3                      	--1
@@ -96,7 +91,7 @@ sbox (B a0 a1 a2 a3) c =
    in B b0'' b1' b2' b3''
 
 
---{-# INLINE linearTransform #-}
+{-# INLINE linearTransform #-}
 linearTransform :: Block1024 -> Block1024
 linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
    let !b4 = a4 `xor` a1
@@ -109,7 +104,7 @@ linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
        !b3 = a3 `xor` b4
    in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
 
---{-# INLINE swap #-}
+{-# INLINE swap #-}
 swap :: Int -> Word128 -> Word128
 swap 0 = swap1
 swap 1 = swap2
@@ -120,7 +115,6 @@ swap 5 = swap32
 swap 6 = swap64
 swap _ = error "Not a number in:  r `mod` 7"
 
-{-
 {-# INLINE swap1 #-}
 {-# INLINE swap2 #-}
 {-# INLINE swap4 #-}
@@ -128,7 +122,6 @@ swap _ = error "Not a number in:  r `mod` 7"
 {-# INLINE swap16 #-}
 {-# INLINE swap32 #-}
 {-# INLINE swap64 #-}
--}
 swap1,swap2,swap4,swap8,swap16,swap32,swap64 :: Word128 -> Word128
 
 swap1 x = shiftL (x .&. 0x55555555555555555555555555555555) 1 
@@ -166,19 +159,15 @@ swap64 (W hi lo) = W lo hi
 
 ---------------------- Utility functions -----------------
 
---{-# INLINE xor512 #-}
+{-# INLINE xor512 #-}
 xor512 :: Block512 -> Block512 -> Block512
 xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
    B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4) 
 
---{-# INLINE blockMap #-}
+{-# INLINE blockMap #-}
 blockMap :: (Word128 -> Word128) -> Block512 -> Block512
-blockMap f (B a1 a2 a3 a4) = B a1' a2' a3' a4'
---blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
-    where !a1' = f a1
-          !a2' = f a2
-          !a3' = f a3
-          !a4' = f a4
+blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
+
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
@@ -209,6 +198,7 @@ pad dataLen bs
    | partialBlockLen < 256 = [B a (setBit b bitIndex) c d, B 0 0 0 dataLength]
    | partialBlockLen < 384 = [B a b (setBit c bitIndex) d, B 0 0 0 dataLength]
    | partialBlockLen < 512 = [B a b c (setBit d bitIndex), B 0 0 0 dataLength]
+   | otherwise = error $ "Illegal input: " ++ show dataLen ++ ", " ++ show bs
    where 
          fullBlock@(B a b c d) = parseBlock (B.append bs zeroes)
          zeroes = B.replicate 64 0x00
