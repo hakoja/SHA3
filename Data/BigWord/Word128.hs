@@ -1,5 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
-{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE BangPatterns, TypeFamilies, MultiParamTypeClasses #-}
+--{-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 
 module Data.BigWord.Word128 (
@@ -11,8 +11,10 @@ import Data.Bits
 import Data.Word (Word64)	
 import qualified Data.Binary as B
 import qualified Data.Serialize as S
-import Control.Monad (liftM2)
-        
+import Control.Monad (liftM, liftM2)
+import qualified Data.Vector.Generic.Mutable as GM
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Unboxed as V        
 
 
 -- an unsigned 128 bit word. 
@@ -34,13 +36,9 @@ instance Num Word128 where
    fromInteger x = W (fromInteger $ shiftR x 64) (fromInteger x)
    
 word128Plus :: Word128 -> Word128 -> Word128
-(W xh xl) `word128Plus` (W yh yl) =
-   let xl' = fromIntegral xl :: Integer
-       yl' = fromIntegral yl :: Integer
-       xh' = shiftL (fromIntegral xh :: Integer) 64
-       yh' = shiftL (fromIntegral yh :: Integer) 64
-       sum = (xl' + xh') + (yl' + yh')
-   in W (fromIntegral $ shiftR sum 64) (fromIntegral sum)
+(W xh xl) `word128Plus` (W yh yl) = W hi lo
+    where lo = xl + yl
+          hi = xh + yh + if lo < xh then 1 else 0
 
 word128Times :: Word128 -> Word128 -> Word128
 (W xh xl) `word128Times` (W yh yl) = 
@@ -85,3 +83,38 @@ instance B.Binary Word128 where
 instance S.Serialize Word128 where
    put (W h l) = S.put h >> S.put l
    get         = liftM2 W S.get S.get
+
+
+------------------------ UnboxedVector instance ------------
+
+newtype instance V.MVector s Word128 = MV_Word128 (V.MVector s (Word64, Word64))
+newtype instance V.Vector Word128 = V_Word128 (V.Vector (Word64,Word64))
+
+
+instance GM.MVector V.MVector Word128 where
+    basicLength (MV_Word128 v) = GM.basicLength v
+    basicUnsafeSlice i n (MV_Word128 v) = MV_Word128 $ GM.basicUnsafeSlice i n v
+    basicOverlaps (MV_Word128 v1) (MV_Word128 v2) = GM.basicOverlaps v1 v2
+    basicUnsafeNew n = MV_Word128 `liftM` GM.basicUnsafeNew n
+    basicUnsafeRead (MV_Word128 v) i = uncurry W `liftM` GM.basicUnsafeRead v i
+    basicUnsafeReplicate n (W x y) = MV_Word128 `liftM` GM.basicUnsafeReplicate n (x,y)
+    basicUnsafeWrite (MV_Word128 v) i (W x y) = GM.basicUnsafeWrite v i (x,y)
+    basicClear (MV_Word128 v) = GM.basicClear v
+    basicSet (MV_Word128 v) (W x y) = GM.basicSet v (x,y)
+    basicUnsafeCopy (MV_Word128 v1) (MV_Word128 v2) = GM.basicUnsafeCopy v1 v2
+    basicUnsafeMove (MV_Word128 v1) (MV_Word128 v2) = GM.basicUnsafeMove v1 v2
+    basicUnsafeGrow (MV_Word128 v) n = MV_Word128 `liftM` GM.basicUnsafeGrow v n   
+
+instance G.Vector V.Vector Word128 where
+    basicUnsafeFreeze (MV_Word128 v) = V_Word128 `liftM` G.basicUnsafeFreeze v
+    basicUnsafeThaw (V_Word128 v) = MV_Word128 `liftM` G.basicUnsafeThaw v
+    basicLength (V_Word128 v) = G.basicLength v
+    basicUnsafeSlice i n (V_Word128 v) = V_Word128 $ G.basicUnsafeSlice i n v
+    basicUnsafeIndexM (V_Word128 v) i = uncurry W `liftM` G.basicUnsafeIndexM v i
+    basicUnsafeCopy (MV_Word128 mv) (V_Word128 v) = G.basicUnsafeCopy mv v
+    elemseq _ (W x y) z = G.elemseq (undefined :: V.Vector Word64) x 
+                        $ G.elemseq (undefined :: V.Vector Word64) y z
+    
+    
+instance V.Unbox Word128
+

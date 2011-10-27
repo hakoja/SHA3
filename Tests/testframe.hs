@@ -14,7 +14,6 @@ import Data.Int (Int64)
 import Text.Printf (printf)
 import System.FilePath ((</>))
 
-
 import qualified Data.Digest.JH224 as JH224
 import qualified Data.Digest.JH256 as JH256
 import qualified Data.Digest.JH384 as JH384
@@ -22,18 +21,24 @@ import qualified Data.Digest.JH512 as JH512
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
-hashFunc = JH512.jh512
+hashFunc = JH224.jh224
 --hashFunc = skein
 --hashFunc = keccack
 
---xLength = 500000 * 64
+cryptoAPIDigest = JH224.Digest
+cryptoAPIHash = JH224.hash
+
+--xLength = 100000 * 64
+--xLength = 1000000 * 64
 xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
 runExtreme False = 
-   void . runTestTT . TestCase $ assertEqual "Extremely long" expectedExtreme512 (hashFunc (8 * xLength) extreme)
+   void . runTestTT . TestCase $ assertEqual "Extremely long" 
+   (printAsHex $ expectedExtreme224) (printAsHex $ hashFunc (8 * xLength) extreme)
 runExtreme True = 
-   void . runTestTT . TestCase $ assertEqual "Extremely long" (JH512.Digest expectedExtreme512) (JH512.hash extreme) 
+   void . runTestTT . TestCase $ assertEqual "Extremely long" 
+   (cryptoAPIDigest expectedExtreme224) (cryptoAPIHash extreme) 
 
 run :: String -> FilePath -> Bool -> IO ()
 run alg testFile byteAligned = do 
@@ -55,14 +60,16 @@ dropUnaligned = filter (\(KAT len _ _) -> len `mod` 8 == 0)
 
 makeAlignedTest :: KAT -> Test
 makeAlignedTest kat = 
-   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (JH512.hash message)
+   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (cryptoAPIHash message)
       where dataLen = len kat
-            expectedDigest = JH512.Digest $ digest kat
+            expectedDigest = cryptoAPIDigest $ digest kat
             message = msg kat
 
 makeUnalignedTest :: KAT -> Test
 makeUnalignedTest kat = 
-   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (hashFunc dataLen message)
+   TestCase $ assertEqual ("Len = " ++ (show dataLen)) 
+                          (printAsHex expectedDigest) 
+                          (printAsHex $ hashFunc dataLen message)
       where dataLen = len kat
             expectedDigest = digest kat
             message = msg kat

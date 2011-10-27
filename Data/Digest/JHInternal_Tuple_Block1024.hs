@@ -33,17 +33,20 @@ import Data.Serialize
 import qualified Data.ByteString.Lazy as L 
 import qualified Data.ByteString as B
 import Control.Monad (liftM2, liftM4)
-import Control.Arrow (first, (***))
+import Control.Arrow (first, second, (***))
 import Text.Printf (printf)
 import Prelude hiding (truncate)
-import qualified Data.Vector.Unboxed as U 
+import Data.Word (Word64)
+import qualified Data.Vector.Unboxed as V 
 
 import Data.BigWord.Word128
 
+
+
 --------------------- Data types for the algorithm -----------------
 
---type Block1024 = (Block512,Block512)
-data Block1024 = B1024 {-# UNPACK #-} !Block512 {-# UNPACK #-} !Block512
+type Block1024 = (Block512,Block512)
+--data Block1024 = B1024 {-# UNPACK #-} !Block512 {-# UNPACK #-} !Block512
 
 data Block512 = B {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
                   {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
@@ -55,31 +58,23 @@ data DigestLength = JH224 | JH256 | JH384 | JH512
 ---------------- The bitslice implementation of the JH algorithm ---------------
 
 f8 :: Block1024 -> Block512 -> Block1024
-f8 (B1024 hh hl) !m = let B1024 bh bl = e8  (B1024 (m `xor512` hh) hl)
-                      in B1024 bh (m `xor512` bl) 
+f8 (!hh,!hl) m = second (m `xor512`) . e8 . first (m `xor512`) $ (hh,hl)
 
 e8 :: Block1024 -> Block1024
-e8 !h = U.foldl' roundFunction h (U.enumFromN 0 42) 
-{-
-e8 !h = go h 0
-    where go !x !n
-           | n == 42   = x
-           | otherwise = go h' (n + 1)
-           where !h' = roundFunction x n
--}
+e8 !h = V.foldl' roundFunction h (V.enumFromN 0 42) 
 
---{-# INLINE roundFunction #-}
+{-# INLINE roundFunction #-}
 roundFunction :: Block1024 -> Int -> Block1024
-roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr = 
+roundFunction (B a0 a1 a2 a3, B a4 a5 a6 a7) roundNr = 
    let r = roundNr `mod` 7
-       !evens = sbox (B a0 a2 a4 a6) (U.unsafeIndex constants  (2 * roundNr))
-       !odds  = sbox (B a1 a3 a5 a7) (U.unsafeIndex constants  (2 * roundNr + 1))
-       B1024 (B b0 b2 b4 b6) !oddsTransformed = linearTransform (B1024 evens odds)
+       !evens = sbox (B a0 a2 a4 a6) (V.unsafeIndex constants  (2 * roundNr))
+       !odds  = sbox (B a1 a3 a5 a7) (V.unsafeIndex constants  (2 * roundNr + 1))
+       (B b0 b2 b4 b6, oddsTransformed) = linearTransform (evens, odds)
        B b1 b3 b5 b7 = blockMap (swap r) oddsTransformed
-   in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
+   in (B b0 b1 b2 b3, B b4 b5 b6 b7)
 
 
---{-# INLINE sbox #-} 
+{-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512
 sbox (B a0 a1 a2 a3) c = 
    let !b3   = complement a3                      	--1
@@ -96,9 +91,9 @@ sbox (B a0 a1 a2 a3) c =
    in B b0'' b1' b2' b3''
 
 
---{-# INLINE linearTransform #-}
+{-# INLINE linearTransform #-}
 linearTransform :: Block1024 -> Block1024
-linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
+linearTransform (B a0 a1 a2 a3, B a4 a5 a6 a7) =
    let !b4 = a4 `xor` a1
        !b5 = a5 `xor` a2
        !b6 = a6 `xor` a3 `xor` a0
@@ -107,9 +102,9 @@ linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
        !b1 = a1 `xor` b6
        !b2 = a2 `xor` b7 `xor` b4
        !b3 = a3 `xor` b4
-   in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
+  in (B b0 b1 b2 b3, B b4 b5 b6 b7)
 
---{-# INLINE swap #-}
+{-# INLINE swap #-}
 swap :: Int -> Word128 -> Word128
 swap 0 = swap1
 swap 1 = swap2
@@ -120,7 +115,7 @@ swap 5 = swap32
 swap 6 = swap64
 swap _ = error "Not a number in:  r `mod` 7"
 
-{-
+
 {-# INLINE swap1 #-}
 {-# INLINE swap2 #-}
 {-# INLINE swap4 #-}
@@ -128,7 +123,6 @@ swap _ = error "Not a number in:  r `mod` 7"
 {-# INLINE swap16 #-}
 {-# INLINE swap32 #-}
 {-# INLINE swap64 #-}
--}
 swap1,swap2,swap4,swap8,swap16,swap32,swap64 :: Word128 -> Word128
 
 swap1 x = shiftL (x .&. 0x55555555555555555555555555555555) 1 
@@ -166,19 +160,14 @@ swap64 (W hi lo) = W lo hi
 
 ---------------------- Utility functions -----------------
 
---{-# INLINE xor512 #-}
+{-# INLINE xor512 #-}
 xor512 :: Block512 -> Block512 -> Block512
 xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
    B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4) 
 
---{-# INLINE blockMap #-}
+{-# INLINE blockMap #-}
 blockMap :: (Word128 -> Word128) -> Block512 -> Block512
-blockMap f (B a1 a2 a3 a4) = B a1' a2' a3' a4'
---blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
-    where !a1' = f a1
-          !a2' = f a2
-          !a3' = f a3
-          !a4' = f a4
+blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
@@ -197,7 +186,7 @@ parseMessage dataLen xs
 
 parseBlock :: B.ByteString -> Block512
 parseBlock = stripEither . runGet (liftM4 B parseW128 parseW128 parseW128 parseW128)   
-   where !parseW128 = liftM2 W getWord64be getWord64be
+   where parseW128 = liftM2 W getWord64be getWord64be
          stripEither (Left string) = error string
          stripEither (Right block) = block
 
@@ -217,10 +206,10 @@ pad dataLen bs
          partialBlockLen = dataLen `rem` 512
 
 truncate :: DigestLength -> Block1024 -> L.ByteString
-truncate JH224 (B1024 _ (B _ _ x6 x7))   = L.append (L.drop 4 $ encodeLazy x6) (encodeLazy x7)
-truncate JH256 (B1024 _ (B _ _ x6 x7))   = L.concat $ map encodeLazy [x6,x7]
-truncate JH384 (B1024 _ (B _ x5 x6 x7))  = L.concat $ map encodeLazy [x5,x6,x7]
-truncate JH512 (B1024 _ (B x4 x5 x6 x7)) = L.concat $ map encodeLazy [x4,x5,x6,x7]
+truncate JH224 (_,(B _ _ x6 x7)) = L.append (L.drop 4 $ encodeLazy x6) (encodeLazy x7)
+truncate JH256 (_,(B _ _ x6 x7)) = L.concat $ map encodeLazy [x6,x7]
+truncate JH384 (_,(B _ x5 x6 x7)) = L.concat $ map encodeLazy [x5,x6,x7]
+truncate JH512 (_,(B x4 x5 x6 x7)) = L.concat $ map encodeLazy [x4,x5,x6,x7]
 
 -------------------------------- Iterative hashing ----------------
 
@@ -253,8 +242,8 @@ jhFinalize ctx bs = truncate dLen . foldl' f8 prevState $ pad n bs
 ----------------------- Round constants ----------------------------
 
 -- Round constants
-constants :: U.Vector Word128
-constants = U.fromList
+constants :: V.Vector Word128
+constants = V.fromList
      [0x72d5dea2df15f8677b84150ab7231557, 0x81abd6904d5a87f64e9f4fc5c3d12b40,
       0xea983ae05c45fa9c03c5d29966b2999a, 0x660296b4f2bb538ab556141a88dba231,
       0x03a35a5c9a190edb403fb20a87c14410, 0x1c051980849e951d6f33ebad5ee7cddc,
