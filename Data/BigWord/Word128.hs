@@ -1,5 +1,4 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 
 module Data.BigWord.Word128 (
@@ -9,7 +8,6 @@ module Data.BigWord.Word128 (
 
 import Data.Bits
 import Data.Word (Word64)	
-import qualified Data.Binary as B
 import qualified Data.Serialize as S
 import Control.Monad (liftM, liftM2)
 import qualified Data.Vector.Generic.Mutable as GM
@@ -23,7 +21,7 @@ data Word128 = W !Word64 !Word64
     deriving (Show, Eq, Ord) 
 
 w128toInteger :: Word128 -> Integer
-w128toInteger (W h l) = shiftL (toInteger h) 64 + (toInteger l)
+w128toInteger (W h l) = shiftL (toInteger h) 64 + toInteger l
 
 ---------------------- Num instance -------------------------
 
@@ -71,12 +69,6 @@ word128Rotate :: Word128 -> Int -> Word128
 word128Rotate x n
    | n >= 0    = (shiftL x n) .|. (shiftR x (128 - n))
    | otherwise = (shiftR x (-n)) .|. (shiftL x (128 + n))
-
----------------------- Binary instance ---------------------
-
-instance B.Binary Word128 where
-   put (W h l) = B.put h >> B.put l
-   get         = liftM2 W B.get B.get
    
 --------------------- Serialize instance -------------------
 

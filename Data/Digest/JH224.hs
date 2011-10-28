@@ -1,14 +1,17 @@
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Digest.JH224 (
             jh224,
-            JH224Digest(..),
-            JHContext (..),
             
+            JH224Digest (..),
+            JHContext,
             Hash(..),
             hash,
-            hash'
+            hash',
+            
+            printAsHex,
+            printAsHex'
 
         )  where
 

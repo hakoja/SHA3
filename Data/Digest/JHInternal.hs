@@ -20,6 +20,7 @@ module Data.Digest.JHInternal (
             
             printAsHex,
             printAsHex'
+            
        ) where 
 
 import Data.Bits
@@ -235,7 +236,7 @@ jhUpdate ctx bs
 
 jhFinalize :: JHContext -> B.ByteString -> L.ByteString
 jhFinalize ctx bs = truncate dLen . foldl' f8 prevState $ pad n bs
-      where !n = dataParsed ctx + (fromIntegral $ B.length bs * 8)
+      where !n = dataParsed ctx + fromIntegral (B.length bs * 8)
             prevState = hashState ctx
             dLen = digestLength ctx 
 

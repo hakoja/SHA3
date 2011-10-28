@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Digest.JH512 (
          jh512,
@@ -8,7 +8,10 @@ module Data.Digest.JH512 (
          
          Hash(..),
          hash,
-         hash'
+         hash',
+         
+         printAsHex,
+         printAsHex'
 
       )  where
 

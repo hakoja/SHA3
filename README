@@ -1,0 +1,5 @@
+This project contains an implementation of the hash algorithm JH,
+which is one of the final candidates in the NIST SHA3 competion.
+
+At moment JH is the only hash algorithm present in the package, but hopefully I 
+can extend it with some of the other candidates with time. 

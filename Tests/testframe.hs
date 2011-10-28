@@ -35,7 +35,7 @@ xLength = 1000000 * 64
 runExtreme :: Bool -> IO ()
 runExtreme False = 
    void . runTestTT . TestCase $ assertEqual "Extremely long" 
-   (printAsHex $ expectedExtreme224) (printAsHex $ hashFunc (8 * xLength) extreme)
+   (printAsHex expectedExtreme224) (printAsHex $ hashFunc (8 * xLength) extreme)
 runExtreme True = 
    void . runTestTT . TestCase $ assertEqual "Extremely long" 
    (cryptoAPIDigest expectedExtreme224) (cryptoAPIHash extreme) 
@@ -45,7 +45,7 @@ run alg testFile byteAligned = do
       file <- readFile $ "./Tests/KAT_MCT" </> alg </> testFile
       let p_result = parse p_KATFile testFile file
       case p_result of  
-         Left parseError -> putStrLn (show parseError)
+         Left parseError -> print parseError
          Right katFile -> void . runTestTT $ makeTests byteAligned katFile
 
 
@@ -60,14 +60,14 @@ dropUnaligned = filter (\(KAT len _ _) -> len `mod` 8 == 0)
 
 makeAlignedTest :: KAT -> Test
 makeAlignedTest kat = 
-   TestCase $ assertEqual ("Len = " ++ (show dataLen)) expectedDigest (cryptoAPIHash message)
+   TestCase $ assertEqual ("Len = " ++ show dataLen) expectedDigest (cryptoAPIHash message)
       where dataLen = len kat
             expectedDigest = cryptoAPIDigest $ digest kat
             message = msg kat
 
 makeUnalignedTest :: KAT -> Test
 makeUnalignedTest kat = 
-   TestCase $ assertEqual ("Len = " ++ (show dataLen)) 
+   TestCase $ assertEqual ("Len = " ++ show dataLen) 
                           (printAsHex expectedDigest) 
                           (printAsHex $ hashFunc dataLen message)
       where dataLen = len kat
@@ -99,7 +99,7 @@ instance Show KAT where
   
 p_KATFile :: GenParser Char st KATFile
 p_KATFile = KATFile <$> 
-   (p_header <* newline) <*> (endBy p_KAT (optional newline))
+   (p_header <* newline) <*> endBy p_KAT (optional newline)
 
 p_header :: GenParser Char st Header
 p_header = do
