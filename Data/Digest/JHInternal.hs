@@ -51,18 +51,15 @@ data DigestLength = JH224 | JH256 | JH384 | JH512
 ---------------- The bitslice implementation of the JH algorithm ---------------
 
 f8 :: Block1024 -> Block512 -> Block1024
-f8 (B1024 hh hl) !m = let B1024 bh bl = e8  (B1024 (m `xor512` hh) hl)
-                      in B1024 bh (m `xor512` bl) 
+f8 !h !m = (m `xor512R`) . e8 . (m `xor512L`) $ h 
+    where xor512L m' (B1024 xh xl) = B1024 (m' `xor512` xh) xl
+          xor512R m' (B1024 xh xl) = B1024 xh (m' `xor512` xl)
+          xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
+                  B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4)
+
 --{-# INLINE e8 #-}
 e8 :: Block1024 -> Block1024
 e8 !h = U.foldl' roundFunction h (U.enumFromN 0 42) 
-{-
-e8 !h = go h 0
-    where go !x !n
-           | n == 42   = x
-           | otherwise = go h' (n + 1)
-           where !h' = roundFunction x n
--}
 
 {-# INLINE roundFunction #-}
 roundFunction :: Block1024 -> Int -> Block1024
@@ -73,7 +70,8 @@ roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr =
        B1024 (B b0 b2 b4 b6) !oddsTransformed = linearTransform (B1024 evens odds)
        B b1 b3 b5 b7 = blockMap (swap r) oddsTransformed
    in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
-
+	   
+	   where blockMap f (B x1 x2 x3 x4) = B (f x1) (f x2) (f x3) (f x4) 
 
 {-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512
@@ -128,12 +126,6 @@ swap1,swap2,swap4,swap8,swap16,swap32,swap64 :: Word128 -> Word128
 swap1 x = shiftL (x .&. 0x55555555555555555555555555555555) 1 
           .|. 
           shiftR (x .&. 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) 1
-{-
-swap1 (W xh hl) = 
-          shiftL (W (xh .&. 0x5555555555555555) (xl .&. 0x5555555555555555)) 1 
-          .|. 
-          shiftR (W (xh .&. 0xaaaaaaaaaaaaaaaa) (xl .&. 0xaaaaaaaaaaaaaaaa)) 1 
--}
 
 swap2 x = shiftL (x .&. 0x33333333333333333333333333333333) 2 
           .|. 
@@ -159,16 +151,6 @@ swap64 (W hi lo) = W lo hi
 
 
 ---------------------- Utility functions -----------------
-
-{-# INLINE xor512 #-}
-xor512 :: Block512 -> Block512 -> Block512
-xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
-   B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4) 
-
-{-# INLINE blockMap #-}
-blockMap :: (Word128 -> Word128) -> Block512 -> Block512
-blockMap f (B a1 a2 a3 a4) = B (f a1) (f a2) (f a3) (f a4)
-
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
