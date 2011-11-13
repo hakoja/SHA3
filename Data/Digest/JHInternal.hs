@@ -70,8 +70,8 @@ roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr =
        B1024 (B b0 b2 b4 b6) !oddsTransformed = linearTransform (B1024 evens odds)
        B b1 b3 b5 b7 = blockMap (swap r) oddsTransformed
    in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
-	   
-	   where blockMap f (B x1 x2 x3 x4) = B (f x1) (f x2) (f x3) (f x4) 
+       
+       where blockMap f (B x1 x2 x3 x4) = B (f x1) (f x2) (f x3) (f x4) 
 
 {-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512

@@ -18,7 +18,7 @@ main = do
          Just filePath -> run alg filePath byteAligned 
          Nothing       -> putStrLn $ testCase ++ "is not a valid test file option. \n\nOptions: shortXXX, longXXX"
 
-algorithms = ["jh","skein"]
+algorithms = ["jh","skein","groestl"]
 
 testOptions :: [(String,FilePath)]
 testOptions = [("short224", "ShortMsgKAT_224.txt"),("short256","ShortMsgKAT_256.txt"),
