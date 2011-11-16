@@ -1,9 +1,38 @@
+{-# LANGUAGE PatternGuards #-}
 
 module Main where
 
 import Tests.Testframe
 import System.Environment (getArgs)
 import Data.Char (toLower)
+import System.Console.GetOpt
+import System.Exit (ExitCode(..), exitWith)
+import System.IO (hPutStrLn, stderr)
+
+
+data Flag = Alg String | TestVar String
+
+options :: [OptDescr Flag]
+options = [Option ['a'] ["algorithm","alg"] (ReqArg (\s -> Alg s) "Algorithm") "Algorithm to test",
+           Option ['t','v'] ["testvariant","variant"] (ReqArg (\s -> TestVar s) "Test variant") "Test variant to run"]
+
+parseArgs :: [String] -> IO ()
+parseArgs argv = do
+    case parse argv of 
+        ([], args, [])            -> mapM_ putStrLn args 
+        (opts, args, [])
+            | [Alg a] <- opts     -> putStrLn ("ALGORITHM: " ++ a) >> mapM_ putStrLn args
+            | [TestVar v] <- opts -> putStrLn $ "VARIANT: " ++ v
+        (_, _, errs)              -> die errs
+    
+    where parse argv = getOpt Permute options argv
+          header     = "Usage: bla, bla, bla..."
+          info       = usageInfo header options
+          dump       = hPutStrLn stderr
+          die errs   = dump (concat errs ++ info) >> exitWith (ExitFailure 1)
+          help       = dump info 
+
+main2 = getArgs >>= parseArgs
 
 main = do
    args <- getArgs
