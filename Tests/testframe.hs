@@ -14,28 +14,32 @@ import Data.Int (Int64)
 import Text.Printf (printf)
 import System.FilePath ((</>))
 
+
 import qualified Data.Digest.JH224 as JH224
+{-
 import qualified Data.Digest.JH256 as JH256
 import qualified Data.Digest.JH384 as JH384
 import qualified Data.Digest.JH512 as JH512
+-}
+
+import qualified Data.Digest.Groestl as G224
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
-hashFunc = JH224.jh224
---hashFunc = skein
---hashFunc = keccack
+--hashFunc = JH224.jh224
+hashFunc = G224.groestl224
 
 cryptoAPIDigest = JH224.Digest
 cryptoAPIHash = JH224.hash
 
---xLength = 100000 * 64
-xLength = 1000000 * 64
+xLength = 100000 * 64
+--xLength = 1000000 * 64
 --xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
 runExtreme False = 
    void . runTestTT . TestCase $ assertEqual "Extremely long" 
-   (printAsHex expectedExtreme224) (printAsHex $ hashFunc (8 * xLength) extreme)
+   (printAsHex xG224) (printAsHex $ hashFunc (8 * xLength) extreme)
 runExtreme True = 
    void . runTestTT . TestCase $ assertEqual "Extremely long" 
    (cryptoAPIDigest expectedExtreme224) (cryptoAPIHash extreme) 
@@ -99,13 +103,13 @@ instance Show KAT where
   
 p_KATFile :: GenParser Char st KATFile
 p_KATFile = KATFile <$> 
-   (p_header <* newline) <*> endBy p_KAT (optional newline)
+   (p_header <* eol) <*> endBy p_KAT (optional eol)
 
 p_header :: GenParser Char st Header
 p_header = do
-   tfn <- string "# " *> manyTill anyChar (string ".txt\n")
-   alg <- string "# Algorithm Name: " *> manyTill anyChar newline
-   manyTill anyChar newline
+   tfn <- string "# " *> manyTill anyChar (string ".txt" <* eol)
+   alg <- string "# Algorithm Name: " *> manyTill anyChar eol
+   manyTill anyChar eol
    return $ Header tfn alg
 
 p_KAT :: GenParser Char st KAT
@@ -114,10 +118,14 @@ p_KAT = do  len <- p "Len = " read digit
             digest <- p "MD = " L.pack p_hexNumber
             return $ KAT len msg digest   
         where 
-         p prefix reader format = reader <$> (string prefix *> manyTill format newline)
+         p prefix reader format = reader <$> (string prefix *> manyTill format eol)
 
 p_hexNumber :: GenParser Char st Word8
 p_hexNumber = read . ("0x" ++) <$> count 2 hexDigit
+
+
+eol = choice [try (string "\n\r"), try (string "\r\n"), try (string "\n"), try (string "\r")]
+      <?> "end of line"  
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
@@ -136,4 +144,6 @@ expectedExtreme224 = readAsHex "B4ABC2827D3547D19B517C673DE2DF2666AE95A0E73ECB21
 expectedExtreme256 = readAsHex "58FFBDE520764DFC03B29598ACD70655BB2C245A3D73FDD6EB9E1BC221AF579B"
 expectedExtreme384 = readAsHex "836EC726CA5280BBC490A25389D1F507CECED047E9E3DAF0ED3DAA5D9AEDE2DDA89C8B7995F7855A3354AFBFFF1B4935"
 expectedExtreme512 = readAsHex "A3053657024A43187CF8C1C82194D5D944A7408EE3B584801309292DEFF8080F88183B5642318456C7C05998C9A70D0F784E4C42D9EBCBA7F2CA25B3FBDE2CE5"
+
+xG224 = readAsHex "E0ABD47D755D0D5AE5853F1253C46AA574E896D6705AEF9944BFEA8D"
 
