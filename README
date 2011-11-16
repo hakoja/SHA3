@@ -1,5 +1,4 @@
-This project contains an implementation of the hash algorithm JH,
-which is one of the final candidates in the NIST SHA3 competion.
+This project contains implementations of the hash algorithms JH and Grøstl,
+which are candidates in the final round of the NIST SHA3 competion.
 
-At moment JH is the only hash algorithm present in the package, but hopefully I 
-can extend it with some of the other candidates with time. 
+Hopefully I will be able to implement all the candidates in due time.
