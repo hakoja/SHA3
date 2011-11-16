@@ -10,9 +10,12 @@ import qualified Data.Binary as B
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as MV
+import qualified Data.Vector.Generic as G
 import Control.Exception.Base (assert)
 import Text.Printf
-import Control.Monad (liftM)
+import Control.Monad
+import Control.Monad.Primitive (PrimMonad, PrimState)
 import Prelude hiding (truncate)
 import Control.Parallel (par, pseq)
 
@@ -21,30 +24,12 @@ import Data.Digest.GroestlTables
 printWAsHex :: Word64 -> String
 printWAsHex = printf "0x%016x"
 
-test :: V.Vector Word64
-test = V.fromList [0x6162638000000000, 0, 0, 0, 0, 0, 0, 1]
-
-testP :: V.Vector Word64
-testP = V.fromList [0x6162638000000000, 0, 0, 0, 0, 0, 0, 0xe1]
-
-hashTest0 = printAsHex $ groestl224 0 (L.pack []) 
-hashTest1 = printAsHex $ groestl224 1 (L.pack [0x00]) 
-hashTest2 = printAsHex $ groestl224 2 (L.pack [0xc0]) 
-hashTest447 = printAsHex $ groestl224 447 (readAsHex "F6203A102927E1F775EE10391B2370C4133EA999EF76E822FB47B2C47372FC5A0B2F61C467FDA567621DE7FCD29559C8B479AFFEC131572A")
-hashTest448 = printAsHex $ groestl224 448 (readAsHex "EEBCC18057252CBF3F9C070F1A73213356D5D4BC19AC2A411EC8CDEEE7A571E2E20EAF61FD0C33A0FFEB297DDB77A97F0A415347DB66BCAF")
-hashTest449 = printAsHex $ groestl224 449 (readAsHex "1251A40134EAF29B0FCBBA4E9712AD63E95DF1473C561127B1BE2B64375804F7D54C442B0C89100E66BCFEB906013437E7EC5885C197756580")
-
-hashTest510 = printAsHex $ groestl224 510 (readAsHex "15E0FEEB0F7010B047634E909D4646454FA1F06D7DAE63E831191CAD21604FEC81FF4FE69E540169A752C82CAC9C167E15C431F29AAF752B57DE63BEB0319580")
-
-
-
 readAsHex :: String -> L.ByteString
 readAsHex = L.pack . map (read . ("0x"++)) . take2
 
 take2 :: [a] -> [[a]]
 take2 (a:b:rest) = [a,b] : take2 rest
 take2 _          = []
-
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
@@ -69,6 +54,25 @@ f512 h m = V.force outP `par` (V.force outQ `pseq` (V.zipWith3 xor3 h outP outQ)
           inP = V.zipWith xor h m
           outP = permP inP
           outQ = permQ m
+    
+column :: V.Vector Word64
+       -> Int -> Int -> Int -> Int
+       -> Int -> Int -> Int -> Int 
+       -> Word64
+column v c0 c1 c2 c3 c4 c5 c6 c7 = 
+    V.unsafeIndex tables (index 0 c0) `xor`
+    V.unsafeIndex tables (index 1 c1) `xor`
+    V.unsafeIndex tables (index 2 c2) `xor`
+    V.unsafeIndex tables (index 3 c3) `xor`
+    V.unsafeIndex tables (index 4 c4) `xor`
+    V.unsafeIndex tables (index 5 c5) `xor`
+    V.unsafeIndex tables (index 6 c6) `xor`
+    V.unsafeIndex tables (index 7 c7) 
+    
+    where index i c = i * 256 + fromIntegral (extractByte i (v V.! c))
+
+extractByte :: Int -> Word64 -> Word8
+extractByte n w = fromIntegral $ shiftR w (8 * (7 - n))
 
 permQ :: V.Vector Word64 -> V.Vector Word64
 permQ x = V.foldl' rnd512Q x (V.enumFromN 0 10) 
@@ -120,25 +124,6 @@ rnd512P !x rndNr =
         !w7 = column y 7 0 1 2 3 4 5 6
     in V.fromList [w0, w1, w2, w3, w4, w5, w6, w7]
 
-column :: V.Vector Word64
-       -> Int -> Int -> Int -> Int
-       -> Int -> Int -> Int -> Int 
-       -> Word64
-column !v !c0 !c1 !c2 !c3 !c4 !c5 !c6 !c7 = 
-    V.unsafeIndex tables (index 0 c0) `xor`
-    V.unsafeIndex tables (index 1 c1) `xor`
-    V.unsafeIndex tables (index 2 c2) `xor`
-    V.unsafeIndex tables (index 3 c3) `xor`
-    V.unsafeIndex tables (index 4 c4) `xor`
-    V.unsafeIndex tables (index 5 c5) `xor`
-    V.unsafeIndex tables (index 6 c6) `xor`
-    V.unsafeIndex tables (index 7 c7) 
-    
-    where index !i !c = i * 256 + fromIntegral (extractByte i (V.unsafeIndex v c))
-
-extractByte :: Int -> Word64 -> Word8
-extractByte !n !w = fromIntegral $ shiftR w (8 * (7 - n))
-
 
 ---------------------------- Parsing ------------------------------
 parseMessage :: Int64 -> Int64 -> L.ByteString -> [V.Vector Word64]
@@ -155,7 +140,7 @@ pad :: Int64 -> Int64 -> L.ByteString -> [V.Vector Word64]
 pad dataLen blockLen xs
     | dataLen == 0 || L.null xs = [V.fromList [0x8000000000000000, 0,0,0,0,0,0, lengthPad + 1]] 
     | partialBlockLen == 0 = [parseBlock xs, V.fromList [0x8000000000000000, 0,0,0,0,0,0, lengthPad + 1]]  
-    | L.length onePadded <= (blockByteLen - 8) = [parseBlock fullBlock V.// [(7, lengthPad + 1)]]
+    | L.length onePadded <= (blockByteLen - 8) = [V.unsafeUpdate (parseBlock fullBlock) (V.singleton (7, lengthPad + 1))]
     | otherwise = [parseBlock fullBlock, V.fromList [0,0,0,0,0,0,0, lengthPad + 2]]
     where w = (blockLen - (8 * L.length xs) - 65) `mod` blockLen
           onePadded = appendOne xs partialBlockLen

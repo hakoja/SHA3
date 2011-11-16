@@ -23,11 +23,12 @@ import qualified Data.Digest.JH512 as JH512
 -}
 
 import qualified Data.Digest.Groestl as G224
+import qualified Data.Digest.GroestlMutable as GM224
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
 --hashFunc = JH224.jh224
-hashFunc = G224.groestl224
+hashFunc = GM224.groestl224M
 
 cryptoAPIDigest = JH224.Digest
 cryptoAPIHash = JH224.hash
@@ -147,3 +148,4 @@ expectedExtreme512 = readAsHex "A3053657024A43187CF8C1C82194D5D944A7408EE3B58480
 
 xG224 = readAsHex "E0ABD47D755D0D5AE5853F1253C46AA574E896D6705AEF9944BFEA8D"
 
+xG224 = readAsHex "E0ABD47D755D0D5AE5853F1253C46AA574E896D6705AEF9944BFEA8D"
