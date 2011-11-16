@@ -1,35 +1,27 @@
 {-# LANGUAGE BangPatterns #-}
 
-module Data.Digest.Groestl where
+module Data.Digest.Groestl(
+           groestl224,
+           printWAsHex,
+           printAsHex
+       ) where
 
 import Data.Word (Word64, Word8)
 import Data.Int (Int64) 	
-import Data.Bits (xor, (.&.), shiftR, setBit)
+import Data.Bits (xor, shiftR, setBit)
 import Data.List (foldl')
 import qualified Data.Binary as B
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
-import qualified Data.Vector.Unboxed.Mutable as MV
-import qualified Data.Vector.Generic as G
-import Control.Exception.Base (assert)
 import Text.Printf
-import Control.Monad
-import Control.Monad.Primitive (PrimMonad, PrimState)
 import Prelude hiding (truncate)
-import Control.Parallel (par, pseq)
+--import Control.Parallel (par, pseq)
 
 import Data.Digest.GroestlTables
 
 printWAsHex :: Word64 -> String
 printWAsHex = printf "0x%016x"
-
-readAsHex :: String -> L.ByteString
-readAsHex = L.pack . map (read . ("0x"++)) . take2
-
-take2 :: [a] -> [[a]]
-take2 (a:b:rest) = [a,b] : take2 rest
-take2 _          = []
 
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
@@ -49,11 +41,16 @@ outputTransformation :: V.Vector Word64 -> V.Vector Word64
 outputTransformation x = V.zipWith xor (permP x) x 
 
 f512 :: V.Vector Word64 -> V.Vector Word64 -> V.Vector Word64
+f512 !h !m = V.zipWith3 xor3 h (permP inP) (permQ m)
+    where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
+          inP = V.zipWith xor h m
+{-
 f512 h m = V.force outP `par` (V.force outQ `pseq` (V.zipWith3 xor3 h outP outQ))
     where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
           inP = V.zipWith xor h m
           outP = permP inP
           outQ = permQ m
+-}
     
 column :: V.Vector Word64
        -> Int -> Int -> Int -> Int
@@ -142,7 +139,7 @@ pad dataLen blockLen xs
     | partialBlockLen == 0 = [parseBlock xs, V.fromList [0x8000000000000000, 0,0,0,0,0,0, lengthPad + 1]]  
     | L.length onePadded <= (blockByteLen - 8) = [V.unsafeUpdate (parseBlock fullBlock) (V.singleton (7, lengthPad + 1))]
     | otherwise = [parseBlock fullBlock, V.fromList [0,0,0,0,0,0,0, lengthPad + 2]]
-    where w = (blockLen - (8 * L.length xs) - 65) `mod` blockLen
+    where 
           onePadded = appendOne xs partialBlockLen
           fullBlock = L.append onePadded (L.take (blockByteLen - L.length onePadded) zeroes) 
           zeroes = L.repeat 0x00
@@ -159,6 +156,9 @@ appendOne xs len
 
 truncate :: DigestLength -> V.Vector Word64 -> L.ByteString
 truncate G224 = L.drop 4 . L.concat . map B.encode . V.toList . V.unsafeSlice 4 4 
+truncate G256 = L.concat . map B.encode . V.toList . V.unsafeSlice 4 4 
+truncate G384 = L.concat . map B.encode . V.toList . V.unsafeSlice 2 6 
+truncate G512 = L.concat . map B.encode . V.toList 
 ----------------------------------------------------------------------------------
 
 h0_224 :: V.Vector Word64
