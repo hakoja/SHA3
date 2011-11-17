@@ -28,7 +28,7 @@ import qualified Data.Digest.GroestlMutable as GM224
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
 --hashFunc = JH224.jh224
-hashFunc = GM224.groestl224M
+hashFunc = GM224.groestl224
 
 cryptoAPIDigest = JH224.Digest
 cryptoAPIHash = JH224.hash

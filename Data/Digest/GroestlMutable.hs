@@ -1,7 +1,8 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, Rank2Types #-}
 
 module Data.Digest.GroestlMutable (
            groestl224M,
+           groestl224,
            printWAsHex,
            printAsHex
        ) where
@@ -15,6 +16,7 @@ import qualified Data.Binary.Get as G
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
+import Control.Monad
 import Control.Monad.ST
 import Prelude hiding (truncate)
 import Text.Printf (printf)
@@ -33,11 +35,30 @@ groestl224M dataBitLen
     | dataBitLen < 0 = error "The data length can not be less than 0"
     | otherwise = truncate G224 . outputTransformation . foldl' f512M h0_224 . parseMessage dataBitLen 512
 
+
+groestl224 :: Int64 -> L.ByteString -> L.ByteString
+groestl224 dataBitLen 
+    | dataBitLen < 0 = error "The data length can not be less than 0"
+    | otherwise = truncate G224 . outputTransformation . compress dataBitLen
+    where {-# INLINE compress #-}
+          compress d xs = runST (foldM f512 h0_224 $ parseMessage d 512 xs)
+
 --{-# INLINE f512M #-}
 f512M :: V.Vector Word64 -> V.Vector Word64 -> V.Vector Word64
 f512M h m = V.zipWith3 xor3 h (runP inP) (runQ m)
     where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
           inP = V.zipWith xor h m
+
+f512 :: V.Vector Word64 -> V.Vector Word64 -> ST s (V.Vector Word64)
+f512 h m = do
+    outP <- permPM =<< V.unsafeThaw inP
+    outQ <- permQM =<< V.unsafeThaw m
+    liftM2 (V.zipWith3 xor3 h) (V.unsafeFreeze outP) (V.unsafeFreeze outQ)    
+    where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
+          inP = V.zipWith xor h m
+
+--bar :: Int64 -> L.ByteString -> L.ByteString
+--bar dataBitLen xs = truncate G224 . outputTransformation $ runST $ foldM f512 h0_224 $ parseMessage dataBitLen 512 xs
 
 --{-# INLINE runP #-}
 runP :: V.Vector Word64 -> V.Vector Word64
@@ -110,7 +131,7 @@ rnd512QM x rndNr = do
 {-# INLINE update #-}
 update :: MV.STVector s Word64 -> Int -> Word64 -> Word64 -> ST s () 
 update x i rndNr c = do
-    !xi <- MV.unsafeRead x i 
+    xi <- MV.unsafeRead x i 
     MV.unsafeWrite x i (xi `xor` c `xor` rndNr)
 
 ----{-# INLINE columnM #-}
@@ -121,26 +142,26 @@ columnM :: Int
         -> Int -> Int -> Int -> Int 
         -> ST s ()
 columnM i x y c0 c1 c2 c3 c4 c5 c6 c7 = do
-    !x0 <- tableLookup x 0 c0
-    !x1 <- tableLookup x 1 c1
-    !x2 <- tableLookup x 2 c2
-    !x3 <- tableLookup x 3 c3 
-    !x4 <- tableLookup x 4 c4
-    !x5 <- tableLookup x 5 c5 
-    !x6 <- tableLookup x 6 c6
-    !x7 <- tableLookup x 7 c7      
+    x0 <- tableLookup x 0 c0
+    x1 <- tableLookup x 1 c1
+    x2 <- tableLookup x 2 c2
+    x3 <- tableLookup x 3 c3 
+    x4 <- tableLookup x 4 c4
+    x5 <- tableLookup x 5 c5 
+    x6 <- tableLookup x 6 c6
+    x7 <- tableLookup x 7 c7      
     
     MV.unsafeWrite y i (x0 `xor` x1 `xor` x2 `xor` x3 `xor` x4 `xor` x5 `xor` x6 `xor` x7) 
 
 {-# INLINE tableLookup #-}
 tableLookup :: MV.STVector s Word64 -> Int -> Int -> ST s Word64
 tableLookup x !i !c = do
-    !t <- MV.unsafeRead x c
-    let !v = V.unsafeIndex tables (i * 256 + fromIntegral (extractByte i t))
+    t <- MV.unsafeRead x c
+    let v = V.unsafeIndex tables (i * 256 + fromIntegral (extractByte i t))
     return v
     where extractByte :: Int -> Word64 -> Word8   
           {-# INLINE extractByte #-}
-          extractByte !n !w = fromIntegral $ shiftR w (8 * (7 - n))
+          extractByte n w = fromIntegral $ shiftR w (8 * (7 - n))
 
 outputTransformation :: V.Vector Word64 -> V.Vector Word64
 outputTransformation !x = V.zipWith xor (permP' x) x
@@ -204,7 +225,6 @@ printWAsHex = printf "0x%016x"
 printAsHex :: L.ByteString -> String
 printAsHex = concat . ("0x" :) . map (printf "%02x") . L.unpack
 
-{-
 testQ :: V.Vector Word64
 testQ = V.fromList [0x6162638000000000, 0, 0, 0, 0, 0, 0, 1]
 
@@ -214,5 +234,5 @@ testP = V.fromList [0x6162638000000000, 0, 0, 0, 0, 0, 0, 0xe1]
 testQM, testPM :: IO ()
 testQM = print . map printWAsHex . V.toList . runQ $ testQ       
 testPM = print . map printWAsHex . V.toList . runP $ testP
--}
+
 
