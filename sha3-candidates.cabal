@@ -15,12 +15,12 @@ Synopsis:        An implementation of the SHA3 hash canditades JH and Grøstl.
 Library
    Build-Depends: base == 4.*, bytestring >= 0.9, cereal, crypto-api, tagged, vector >= 0.9, binary
    Extensions: BangPatterns, MultiParamTypeClasses, TypeFamilies
-   GHC-Options: -Wall -O2
+   GHC-Options: -Wall -Odph -O2 -fllvm -optlo-O3
    GHC-Prof-Options: -auto-all
    Exposed-Modules: Data.Digest.JH224, Data.Digest.JH256, Data.Digest.JH384, Data.Digest.JH512, 
-                    Data.Digest.Groestl, Data.Digest.GroestlMutable 
+                    Data.Digest.Groestl, Data.Digest.Groestl224, Data.Digest.Groestl256 
    Other-Modules: Data.Digest.JHInternal, Data.BigWord.Word128,
-                  Data.Digest.GroestlTables
+                  Data.Digest.GroestlMutable, Data.Digest.GroestlTables
 
 
 
