@@ -30,6 +30,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
+import Control.Monad
 import Control.Monad.ST
 import Control.Arrow ((***))
 import Prelude hiding (truncate)
@@ -48,10 +49,26 @@ data DigestLength = G224 | G256 | G384 | G512
 
 f512 :: V.Vector Word64 -> V.Vector Word64 -> V.Vector Word64
 f512 h m = V.zipWith3 xor3 h (runP inP) (runQ m)
+groestl224 dataBitLen 
+    | dataBitLen < 0 = error "The data length can not be less than 0"
+    | otherwise = truncate G224 . outputTransformation . compress dataBitLen
+    where {-# INLINE compress #-}
+          compress d xs = runST (foldM f512 h0_224 $ parseMessage d 512 xs)
+
     where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
           inP = V.zipWith xor h m
 
 {-# INLINE runP #-}
+f512 h m = do
+    outP <- permPM =<< V.unsafeThaw inP
+    outQ <- permQM =<< V.unsafeThaw m
+    liftM2 (V.zipWith3 xor3 h) (V.unsafeFreeze outP) (V.unsafeFreeze outQ)    
+    where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
+          inP = V.zipWith xor h m
+
+--bar :: Int64 -> L.ByteString -> L.ByteString
+--bar dataBitLen xs = truncate G224 . outputTransformation $ runST $ foldM f512 h0_224 $ parseMessage dataBitLen 512 xs
+
 runP :: V.Vector Word64 -> V.Vector Word64
 runP x = runST $ V.unsafeThaw x >>= permPM >>= V.unsafeFreeze
 
