@@ -27,12 +27,14 @@ import Prelude hiding (truncate)
 
 import Data.Digest.GroestlMutable
 
+
 groestl256 :: Int64 -> L.ByteString -> L.ByteString
 groestl256 dataBitLen
     | dataBitLen < 0 = error "The data length can not be less than 0"
     | otherwise = truncate G256 . outputTransform . compress . parse
     where parse = parseMessage dataBitLen 512
           compress xs = runST (foldM f512M h0_256 xs)
+
 
 ---------------------- Crypto-api instance -------------
 

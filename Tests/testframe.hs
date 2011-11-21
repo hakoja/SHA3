@@ -20,22 +20,22 @@ import System.FilePath ((</>))
 --import qualified Data.Digest.JH384 as JH384
 --import qualified Data.Digest.JH512 as JH512
 
---import qualified Data.Digest.Groestl224 as G224
-import qualified Data.Digest.Groestl256 as G256
+import qualified Data.Digest.Groestl224 as G224
+--import qualified Data.Digest.Groestl256 as G256
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
 --hashFunc = JH224.jh224
-hashFunc = G256.groestl256
+hashFunc = G224.groestl224Par
 
-cryptoAPIDigest = G256.Digest
-cryptoAPIHash = G256.hash
+cryptoAPIDigest = G224.Digest
+cryptoAPIHash = G224.hash
 
 xExtreme = xG256
 
 --xLength = 100000 * 64
---xLength = 1000000 * 64
-xLength = 16777216 * 64
+xLength = 1000000 * 64
+--xLength = 16777216 * 64
 
 runExtreme :: Bool -> IO ()
 runExtreme False = 

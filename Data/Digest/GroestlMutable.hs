@@ -2,8 +2,9 @@
 
 module Data.Digest.GroestlMutable (
            
+           f512Par,
+           
            f512M,
-           f512,
            outputTransform,
            parseMessage,
            pad,         
@@ -30,11 +31,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
-import Control.Monad
-import Control.Monad.ST
+import Control.Monad (liftM, foldM)
+import Control.Monad.ST (ST, runST)
 import Control.Arrow ((***))
 import Prelude hiding (truncate)
 import Text.Printf (printf)
+import Control.Parallel.Strategies (runEval, rpar, rseq)
+
 
 import Data.Digest.GroestlTables
 
@@ -45,6 +48,27 @@ data DigestLength = G224 | G256 | G384 | G512
     deriving (Eq, Ord)
 
 ---------------------------------- A port of the optimized 64-bit C version -----------------------
+
+
+-- This part is only used for experimenting with 
+-- parallel execution of the P and Q functions.
+-- f512M is the stable (serial) version. 
+f512Par :: V.Vector Word64 -> V.Vector Word64 -> V.Vector Word64
+f512Par h m = runEval $ do
+             outP <- rpar (runP inP)
+             outQ <- rseq (runQ m)
+             return (V.zipWith3 xor3 h outP outQ)
+    where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
+          inP = V.zipWith xor h m
+
+{-# INLINE runP #-}
+runP :: V.Vector Word64 -> V.Vector Word64
+runP x = runST $ V.unsafeThaw x >>= permPM >>= V.unsafeFreeze
+
+{-# INLINE runQ #-}
+runQ :: V.Vector Word64 -> V.Vector Word64
+runQ x = runST $ V.unsafeThaw x >>= permQM >>= V.unsafeFreeze
+
 
 {-# INLINE f512M #-}
 f512M :: V.Vector Word64 -> V.Vector Word64 -> ST s (V.Vector Word64)
@@ -59,6 +83,8 @@ f512M h m = do
 permPM :: MV.STVector s Word64 -> ST s (MV.STVector s Word64)
 permPM x = V.foldM' rnd512PM x (V.enumFromStepN 0 0x0100000000000000 10)
 
+-- !!! Inlining this function leads to 4 times the run-time. 
+-- See also: rnd512QM
 --{-# INLINE permQM #-}
 permQM :: MV.STVector s Word64 -> ST s (MV.STVector s Word64)
 permQM x = V.foldM' rnd512QM  x (V.enumFromN 0 10)
@@ -188,8 +214,8 @@ pad dataLen blockLen xs
 appendOne :: L.ByteString -> Int64 -> L.ByteString
 appendOne xs len
     | len == 0 || L.null xs = L.singleton 0x80
-    | byteOffset == 0 =  L.snoc xs 0x80
-    | otherwise = L.snoc (L.init xs) (setBit (L.last xs) (7 - byteOffset))
+    | byteOffset == 0       =  L.snoc xs 0x80
+    | otherwise             = L.snoc (L.init xs) (setBit (L.last xs) (7 - byteOffset))
     where byteOffset = fromIntegral $ len `mod` 8
 
 
@@ -200,20 +226,6 @@ truncate G384 = L.concat . map B.encode . V.toList . V.unsafeSlice 2 6
 truncate G512 = L.concat . map B.encode . V.toList 
 
 --------------------------------- Iterative hashing --------------------
-
-f512 :: V.Vector Word64 -> V.Vector Word64 -> V.Vector Word64
-f512 h m = V.zipWith3 xor3 h (runP inP) (runQ m)
-    where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
-          inP = V.zipWith xor h m
-
-{-# INLINE runP #-}
-runP :: V.Vector Word64 -> V.Vector Word64
-runP x = runST $ V.unsafeThaw x >>= permPM >>= V.unsafeFreeze
-
-{-# INLINE runQ #-}
-runQ :: V.Vector Word64 -> V.Vector Word64
-runQ x = runST $ V.unsafeThaw x >>= permQM >>= V.unsafeFreeze
-
 
 data GroestlCtx = Ctx {
             dataParsed :: !Int64,
@@ -226,13 +238,13 @@ groestlInit dLen h0 = Ctx {dataParsed = 0, digestLength = dLen, hashState = h0}
 
 groestlUpdate :: GroestlCtx -> BS.ByteString -> GroestlCtx
 groestlUpdate ctx bs
-   | BS.null  bs = ctx
+   | BS.null bs = ctx
    | otherwise  = result
    where 
-   (!newState, result) = foldUpdate . BS.splitAt 64 $ bs
-   foldUpdate = hashBlock *** groestlUpdate newCtx
-   hashBlock = f512 (hashState ctx) . parseBlock'
-   newCtx = Ctx (dataParsed ctx + 512) (digestLength ctx) newState
+       (!newState, result) = foldUpdate . BS.splitAt 64 $ bs
+       foldUpdate          = hashBlock *** groestlUpdate newCtx
+       hashBlock bs        = runST $ f512M (hashState ctx) $ parseBlock' bs
+       newCtx              = Ctx (dataParsed ctx + 512) (digestLength ctx) newState
 
 {-# INLINE parseBlock' #-}
 parseBlock' :: BS.ByteString  -> V.Vector Word64
@@ -242,11 +254,11 @@ parseBlock' = V.unfoldr p
                       Right w -> Just (w, BS.drop 8 bs)       
 
 groestlFinalize :: GroestlCtx -> BS.ByteString -> L.ByteString
-groestlFinalize ctx bs = truncate dLen . outputTransform . foldl' f512 prevState $ pad n 512 bs'
-    where bs' = L.pack $ BS.unpack bs
-          n = dataParsed ctx + fromIntegral (BS.length bs * 8)
+groestlFinalize ctx bs = runST $ liftM (truncate dLen . outputTransform) . foldM f512M prevState $ pad n 512 bs'
+    where bs'       = L.pack $ BS.unpack bs
+          n         = dataParsed ctx + fromIntegral (BS.length bs * 8)
           prevState = hashState ctx
-          dLen = digestLength ctx
+          dLen      = digestLength ctx
 
 
 ------------------------------------ Some convenience functions -----------------------

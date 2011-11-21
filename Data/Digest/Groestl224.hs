@@ -3,6 +3,7 @@
 
 module Data.Digest.Groestl224 (
             groestl224,
+            groestl224Par,
             
             Groestl224Digest (..),
             GroestlCtx,
@@ -16,6 +17,7 @@ module Data.Digest.Groestl224 (
 
 import Data.Int (Int64)
 import Data.Word (Word64)
+import Data.List (foldl')
 import qualified Data.ByteString.Lazy as L (ByteString)
 import Data.Vector.Unboxed (Vector, fromList)
 import Control.Monad (foldM, liftM)
@@ -33,6 +35,13 @@ groestl224 dataBitLen
     | otherwise = truncate G224 . outputTransform . compress . parse
     where parse = parseMessage dataBitLen 512
           compress xs = runST (foldM f512M h0_224 xs)
+
+
+-- Experimental version using the parallel version of f512
+groestl224Par :: Int64 -> L.ByteString -> L.ByteString
+groestl224Par dataBitLen
+    | dataBitLen < 0 = error "The data length can not be less than 0"
+    | otherwise = truncate G224 . outputTransform . foldl' f512Par h0_224 . parseMessage dataBitLen 512
 
 ---------------------- Crypto-api instance -------------
 
