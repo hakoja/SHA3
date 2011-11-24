@@ -21,17 +21,31 @@ import System.FilePath ((</>))
 --import qualified Data.Digest.JH512 as JH512
 
 import qualified Data.Digest.Groestl224 as G224
---import qualified Data.Digest.Groestl256 as G256
+import qualified Data.Digest.Groestl256 as G256
+import qualified Data.Digest.Groestl384 as G384
+import qualified Data.Digest.Groestl512 as G512
 
 -- The hash function to test. 
 hashFunc :: Int64 -> L.ByteString -> L.ByteString
 --hashFunc = JH224.jh224
-hashFunc = G224.groestl224Par
+--hashFunc = JH224.jh256
+--hashFunc = JH384.jh384
+--hashFunc = JH512.jh512
+hashFunc = G224.groestl224
+--hashFunc = G256.groestl256
+--hashFunc = G384.groestl384
+--hashFunc = G512.groestl512
 
 cryptoAPIDigest = G224.Digest
 cryptoAPIHash = G224.hash
+--cryptoAPIDigest = G256.Digest
+--cryptoAPIHash = G256.hash
+--cryptoAPIDigest = G384.Digest
+--cryptoAPIHash = G384.hash
+--cryptoAPIDigest = G512.Digest
+--cryptoAPIHash = G512.hash
 
-xExtreme = xG256
+xExtreme = xG384
 
 --xLength = 100000 * 64
 xLength = 1000000 * 64
@@ -150,3 +164,4 @@ xJH512 = readAsHex "A3053657024A43187CF8C1C82194D5D944A7408EE3B584801309292DEFF8
 
 xG224 = readAsHex "E0ABD47D755D0D5AE5853F1253C46AA574E896D6705AEF9944BFEA8D"
 xG256 = readAsHex "5F87F9404C1142B9E701076DD047386162213A896560C1656C62BBFEDFBEDDB6"
+xG384 = readAsHex "742C6BBDA24B3DD7F41799B7565A1189E03B406DCF4C4697C3FBA3B7DEA1F65A7F15CAEA841C3FE1B252893D3F918066"
