@@ -28,7 +28,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
-import Control.Monad (liftM, foldM, void)
+import Control.Monad  (liftM, foldM, void, (>=>))
 import Control.Monad.ST (ST, runST)
 import Control.Arrow ((***))
 import Prelude hiding (truncate)
@@ -227,11 +227,11 @@ extractColumn i x y c0 c1 c2 c3 c4 c5 c6 c7 = do
 {-# INLINE tableLookup #-}
 tableLookup :: MV.STVector s Word64 -> Int -> Int -> ST s Word64
 tableLookup x i c = do
-    t <- MV.unsafeRead x c
-    return $ V.unsafeIndex tables $ i * 256 + fromIntegral (extractByte i t)
-    where extractByte :: Int -> Word64 -> Word8   
-          {-# INLINE extractByte #-}
-          extractByte n w = fromIntegral $ shiftR w (8 * (7 - n))
+    w <- MV.unsafeRead x c
+    return . V.unsafeIndex tables $ i * 256 + fromIntegral (w # i)
+    where -- Extract byte from Word64
+          (#) :: Word64 -> Int -> Word8    
+          w # n = fromIntegral $ shiftR w (8 * (7 - n))
 
 outputTransform :: BlockLength -> V.Vector Word64 -> V.Vector Word64
 outputTransform blockLen x = V.zipWith xor (permP' x) x
@@ -259,8 +259,8 @@ pad dataLen blockLen xs
     | dataLen `rem` blockLen <= blockLen - 65 = [v2]
     | otherwise                               = [v3, v4]
     where 
-          v1 = V.modify (\v -> padOne byte bit v >>= padBlockNumber blocks) zeroBlock
-          v2 = V.modify (\v -> padOne byte bit v >>= padBlockNumber blocks) fullBlock
+          v1 = V.modify (padOne byte bit >=> padBlockNumber blocks) zeroBlock
+          v2 = V.modify (padOne byte bit >=> padBlockNumber blocks) fullBlock
           v3 = V.modify (void . padOne byte bit) fullBlock
           v4 = V.modify (padBlockNumber (blocks + 1)) zeroBlock
           byte = (fromIntegral (dataLen `div` 64)) `rem` vectorLen
