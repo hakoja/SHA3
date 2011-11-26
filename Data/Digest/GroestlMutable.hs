@@ -254,19 +254,17 @@ parseBlock = V.unfoldr (\bs -> if L.null bs then Nothing else Just (G.runGet G.g
 -- This function is a mess. Needs to be cleaned up!
 pad :: Int64 -> BlockLength -> L.ByteString -> [V.Vector Word64]
 pad dataLen blockLen xs   
-    | dataLen == 0 || L.null xs               = [v1] 
-    | dataLen `rem` blockLen == 0             = [parseBlock xs, v1]
-    | dataLen `rem` blockLen <= blockLen - 65 = [v2]
-    | otherwise                               = [v3, v4]
+    | dataLen == 0 || L.null xs               = [pad1AndBlockNumber zeroBlock] 
+    | dataLen `rem` blockLen == 0             = [parseBlock xs, pad1AndBlockNumber zeroBlock]
+    | dataLen `rem` blockLen <= blockLen - 65 = [pad1AndBlockNumber fullBlock]
+    | otherwise                               = [onePadded, blockNumberPadded]
     where 
-          v1 = V.modify (padOne byte bit >=> padBlockNumber blocks) zeroBlock
-          v2 = V.modify (padOne byte bit >=> padBlockNumber blocks) fullBlock
-          v3 = V.modify (void . padOne byte bit) fullBlock
-          v4 = V.modify (padBlockNumber (blocks + 1)) zeroBlock
+          pad1AndBlockNumber = V.modify (padOne byte bit >=> padBlockNumber blocks)
+          onePadded = V.modify (void . padOne byte bit) fullBlock
+          blockNumberPadded = V.modify (padBlockNumber (blocks + 1)) zeroBlock
           byte = (fromIntegral (dataLen `div` 64)) `rem` vectorLen
           bit = fromIntegral (63 - dataLen `rem` 64)
-          blockByteLen = blockLen `div` 8
-          fullBlock = parseBlock . L.take blockByteLen . L.append xs $ L.repeat 0x00
+          fullBlock = parseBlock . L.take (blockLen `div` 8) . L.append xs $ L.repeat 0x00
           blocks = fromIntegral $ dataLen `div` blockLen + 1        
           zeroBlock = V.replicate vectorLen 0x00
           vectorLen = fromIntegral $ blockLen `div` 64 
