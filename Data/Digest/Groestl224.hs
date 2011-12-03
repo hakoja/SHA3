@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns, MultiParamTypeClasses, TypeSynonymInstances #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Digest.Groestl224 (
@@ -8,9 +8,7 @@ module Data.Digest.Groestl224 (
             GroestlCtx,
             Hash(..),
             hash,
-            hash',
-            
-            printAsHex
+            hash'
       ) where
 
 
@@ -43,16 +41,15 @@ instance Hash GroestlCtx Groestl224Digest where
     updateCtx    = groestlUpdate
     finalize ctx = Digest . groestlFinalize ctx
 
-data Groestl224Digest = Digest L.ByteString
-    deriving (Eq,Ord)
-
-instance Show Groestl224Digest where
-    show (Digest h) = printAsHex h
+newtype Groestl224Digest = Digest L.ByteString
+    deriving (Eq, Ord)
 
 instance Serialize Groestl224Digest where
     put (Digest bs) = put bs
-    get = liftM Digest get
+    get = get
 
+instance Show Groestl224Digest where
+    show (Digest bs) = printAsHex bs
 ------------------------------------------- Initial vector -------------------------------------
 
 h0_224 :: Vector Word64

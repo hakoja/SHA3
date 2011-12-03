@@ -41,7 +41,7 @@ import Data.BigWord.Word128
 
 data Block1024 = B1024 {-# UNPACK #-} !Block512 {-# UNPACK #-} !Block512
 
-data Block512 = B {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
+data Block512 = B512 {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128 
                   {-# UNPACK #-} !Word128 {-# UNPACK #-} !Word128
    deriving (Eq,Ord,Show)
 
@@ -54,8 +54,8 @@ f8 :: Block1024 -> Block512 -> Block1024
 f8 !h !m = (m `xor512R`) . e8 . (m `xor512L`) $ h 
     where xor512L m' (B1024 xh xl) = B1024 (m' `xor512` xh) xl
           xor512R m' (B1024 xh xl) = B1024 xh (m' `xor512` xl)
-          xor512 (B a1 a2 a3 a4)  (B b1 b2 b3 b4) = 
-                  B (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4)
+          xor512 (B512 a1 a2 a3 a4)  (B512 b1 b2 b3 b4) = 
+                  B512 (a1 `xor` b1) (a2 `xor` b2) (a3 `xor` b3) (a4 `xor` b4)
 
 --{-# INLINE e8 #-}
 e8 :: Block1024 -> Block1024
@@ -63,19 +63,19 @@ e8 !h = U.foldl' roundFunction h (U.enumFromN 0 42)
 
 {-# INLINE roundFunction #-}
 roundFunction :: Block1024 -> Int -> Block1024
-roundFunction (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) roundNr = 
+roundFunction (B1024 (B512 a0 a1 a2 a3) (B512 a4 a5 a6 a7)) roundNr = 
    let r = roundNr `mod` 7
-       !evens = sbox (B a0 a2 a4 a6) (U.unsafeIndex constants  (2 * roundNr))
-       !odds  = sbox (B a1 a3 a5 a7) (U.unsafeIndex constants  (2 * roundNr + 1))
-       B1024 (B b0 b2 b4 b6) !oddsTransformed = linearTransform (B1024 evens odds)
-       B b1 b3 b5 b7 = blockMap (swap r) oddsTransformed
-   in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
+       !evens = sbox (B512 a0 a2 a4 a6) (U.unsafeIndex constants  (2 * roundNr))
+       !odds  = sbox (B512 a1 a3 a5 a7) (U.unsafeIndex constants  (2 * roundNr + 1))
+       B1024 (B512 b0 b2 b4 b6) !oddsTransformed = linearTransform (B1024 evens odds)
+       B512 b1 b3 b5 b7 = blockMap (swap r) oddsTransformed
+   in B1024 (B512 b0 b1 b2 b3) (B512 b4 b5 b6 b7)
        
-       where blockMap f (B x1 x2 x3 x4) = B (f x1) (f x2) (f x3) (f x4) 
+       where blockMap f (B512 x1 x2 x3 x4) = B512 (f x1) (f x2) (f x3) (f x4) 
 
 {-# INLINE sbox #-} 
 sbox :: Block512 -> Word128 -> Block512
-sbox (B a0 a1 a2 a3) c = 
+sbox (B512 a0 a1 a2 a3) c = 
    let !b3   = complement a3                      	--1
        !b0   = a0  `xor` (c .&. (complement a2))  	--2
        !t    = c   `xor` (b0 .&. a1)             	--3
@@ -87,12 +87,12 @@ sbox (B a0 a1 a2 a3) c =
        !b3'' = b3' `xor` (b1 .&. b2)             	--9
        !b1'  = b1  `xor` (t .&. b0'')           	--10
        !b2'  = b2  `xor` t                        	--11
-   in B b0'' b1' b2' b3''
+   in B512 b0'' b1' b2' b3''
 
 
 {-# INLINE linearTransform #-}
 linearTransform :: Block1024 -> Block1024
-linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
+linearTransform (B1024 (B512 a0 a1 a2 a3) (B512 a4 a5 a6 a7)) =
    let !b4 = a4 `xor` a1
        !b5 = a5 `xor` a2
        !b6 = a6 `xor` a3 `xor` a0
@@ -101,7 +101,7 @@ linearTransform (B1024 (B a0 a1 a2 a3) (B a4 a5 a6 a7)) =
        !b1 = a1 `xor` b6
        !b2 = a2 `xor` b7 `xor` b4
        !b3 = a3 `xor` b4
-   in B1024 (B b0 b1 b2 b3) (B b4 b5 b6 b7)
+   in B1024 (B512 b0 b1 b2 b3) (B512 b4 b5 b6 b7)
 
 {-# INLINE swap #-}
 swap :: Int -> Word128 -> Word128
@@ -168,32 +168,32 @@ parseMessage dataLen xs
          rechunk = B.concat . L.toChunks
 
 parseBlock :: B.ByteString -> Block512
-parseBlock = stripEither . runGet (liftM4 B parseW128 parseW128 parseW128 parseW128)   
+parseBlock = stripEither . runGet (liftM4 B512 parseW128 parseW128 parseW128 parseW128)   
    where !parseW128 = liftM2 W getWord64be getWord64be
          stripEither (Left string) = error string
          stripEither (Right block) = block
 
 pad :: Int64 -> B.ByteString -> [Block512]
 pad dataLen bs 
-   | B.null bs || dataLen == 0  = [B (bit 127) 0 0 dataLength]
-   | partialBlockLen == 0  = [fullBlock, B (bit 127) 0 0 dataLength]
-   | partialBlockLen < 128 = [B (setBit a bitIndex) b c d, B 0 0 0 dataLength]
-   | partialBlockLen < 256 = [B a (setBit b bitIndex) c d, B 0 0 0 dataLength]
-   | partialBlockLen < 384 = [B a b (setBit c bitIndex) d, B 0 0 0 dataLength]
-   | partialBlockLen < 512 = [B a b c (setBit d bitIndex), B 0 0 0 dataLength]
+   | B.null bs || dataLen == 0  = [B512 (bit 127) 0 0 dataLength]
+   | partialBlockLen == 0  = [fullBlock, B512 (bit 127) 0 0 dataLength]
+   | partialBlockLen < 128 = [B512 (setBit a bitIndex) b c d, B512 0 0 0 dataLength]
+   | partialBlockLen < 256 = [B512 a (setBit b bitIndex) c d, B512 0 0 0 dataLength]
+   | partialBlockLen < 384 = [B512 a b (setBit c bitIndex) d, B512 0 0 0 dataLength]
+   | partialBlockLen < 512 = [B512 a b c (setBit d bitIndex), B512 0 0 0 dataLength]
    | otherwise = error $ "Illegal input: " ++ show dataLen ++ ", " ++ show bs
    where 
-         fullBlock@(B a b c d) = parseBlock (B.append bs zeroes)
+         fullBlock@(B512 a b c d) = parseBlock (B.append bs zeroes)
          zeroes = B.replicate 64 0x00
          bitIndex = fromIntegral $ 127 - (dataLen `mod` 128)
          dataLength = fromIntegral dataLen
          partialBlockLen = dataLen `rem` 512
 
 truncate :: DigestLength -> Block1024 -> L.ByteString
-truncate JH224 (B1024 _ (B _ _ x6 x7))   = L.append (L.drop 4 $ encodeLazy x6) (encodeLazy x7)
-truncate JH256 (B1024 _ (B _ _ x6 x7))   = L.concat $ map encodeLazy [x6,x7]
-truncate JH384 (B1024 _ (B _ x5 x6 x7))  = L.concat $ map encodeLazy [x5,x6,x7]
-truncate JH512 (B1024 _ (B x4 x5 x6 x7)) = L.concat $ map encodeLazy [x4,x5,x6,x7]
+truncate JH224 (B1024 _ (B512 _ _ x6 x7))   = L.append (L.drop 4 $ encodeLazy x6) (encodeLazy x7)
+truncate JH256 (B1024 _ (B512 _ _ x6 x7))   = L.concat $ map encodeLazy [x6,x7]
+truncate JH384 (B1024 _ (B512 _ x5 x6 x7))  = L.concat $ map encodeLazy [x5,x6,x7]
+truncate JH512 (B1024 _ (B512 x4 x5 x6 x7)) = L.concat $ map encodeLazy [x4,x5,x6,x7]
 
 -------------------------------- Iterative hashing ----------------
 
