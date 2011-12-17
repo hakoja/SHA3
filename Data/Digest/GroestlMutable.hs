@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, Rank2Types, NoMonomorphismRestriction #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Data.Digest.GroestlMutable (
                   
