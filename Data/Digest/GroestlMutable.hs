@@ -43,31 +43,33 @@ data DigestLength = G224 | G256 | G384 | G512
 
 type BlockLength = Int64
 
+newtype HashState s = H { getState :: (MV.STVector s Word64) }
+
 ---------------------------------- A port of the optimized 64-bit C version -----------------------
 
 {-# INLINE fM #-}
 fM :: BlockLength -> V.Vector Word64 -> V.Vector Word64 -> ST s (V.Vector Word64)
 fM b h m = do
-    outP <- V.unsafeFreeze =<< permPM b =<< V.unsafeThaw inP
-    outQ <- V.unsafeFreeze =<< permQM b =<< V.unsafeThaw m
+    outP <- V.unsafeFreeze . getState =<< permPM b =<< H `liftM` V.unsafeThaw inP
+    outQ <- V.unsafeFreeze . getState =<< permQM b =<< H `liftM` V.unsafeThaw m
     return $ V.zipWith3 xor3 h outQ outP    
     where xor3 x1 x2 x3 = x1 `xor` x2 `xor` x3
           inP = V.zipWith xor h m
 
 {-# INLINE permPM #-}
-permPM :: BlockLength -> MV.STVector s Word64 -> ST s (MV.STVector s Word64)
+permPM :: BlockLength -> HashState s -> ST s (HashState s)
 permPM 512  x = V.foldM' rnd512PM  x (V.enumFromStepN 0 0x0100000000000000 10)
 permPM 1024 x = V.foldM' rnd1024PM x (V.enumFromStepN 0 0x0100000000000000 14)
 
 -- !!! Inlining this function leads to 4 times the run-time. 
 -- See also: rnd512QM
 --{-# INLINE permQM #-}
-permQM :: BlockLength -> MV.STVector s Word64-> ST s (MV.STVector s Word64)
+permQM :: BlockLength -> HashState s -> ST s (HashState s)
 permQM 512  x = V.foldM' rnd512QM  x (V.enumFromN 0 10)
 permQM 1024 x = V.foldM' rnd1024QM x (V.enumFromN 0 14)
 
 {-# INLINE rnd512PM #-}
-rnd512PM :: MV.STVector s Word64 -> Word64 -> ST s (MV.STVector s Word64)
+rnd512PM :: HashState s -> Word64 -> ST s (HashState s)
 rnd512PM x rndNr = do 
     addRndConstant x 0 rndNr 0x0000000000000000
     addRndConstant x 1 rndNr 0x1000000000000000
@@ -89,12 +91,12 @@ rnd512PM x rndNr = do
     extractColumn 6 x y 6 7 0 1 2 3 4 5
     extractColumn 7 x y 7 0 1 2 3 4 5 6
         
-    return y
+    return (H y)
 
 -- !!! Inlining this function leads to 4 times the run-time. 
 -- Why?! It's practically the same as rnd512PM, so why does this perform sp badly?
 --{-# INLINE rnd512QM #-}  
-rnd512QM :: MV.STVector s Word64 -> Word64 -> ST s (MV.STVector s Word64)
+rnd512QM :: HashState s -> Word64 -> ST s (HashState s)
 rnd512QM x rndNr = do 
     addRndConstant x 0 rndNr 0xffffffffffffffff
     addRndConstant x 1 rndNr 0xffffffffffffffef
@@ -116,9 +118,9 @@ rnd512QM x rndNr = do
     extractColumn 6 x y 7 1 3 5 6 0 2 4
     extractColumn 7 x y 0 2 4 6 7 1 3 5
         
-    return y
+    return (H y)
 
-rnd1024PM :: MV.STVector s Word64 -> Word64 -> ST s (MV.STVector s Word64)
+rnd1024PM :: HashState s -> Word64 -> ST s (HashState s)
 rnd1024PM x rndNr = do 
     addRndConstant x 0  rndNr 0x0000000000000000
     addRndConstant x 1  rndNr 0x1000000000000000
@@ -156,9 +158,9 @@ rnd1024PM x rndNr = do
     extractColumn  1 x y  1  2  3  4  5  6  7 12    
     extractColumn  0 x y  0  1  2  3  4  5  6 11    
 
-    return y
+    return (H y)
 
-rnd1024QM :: MV.STVector s Word64 -> Word64 -> ST s (MV.STVector s Word64)
+rnd1024QM :: HashState s -> Word64 -> ST s (HashState s)
 rnd1024QM x rndNr = do 
     addRndConstant x 0  rndNr 0xffffffffffffffff
     addRndConstant x 1  rndNr 0xffffffffffffffef
@@ -196,17 +198,17 @@ rnd1024QM x rndNr = do
     extractColumn  1 x y  2  4  6 12  1  3  5  7
     extractColumn  0 x y  1  3  5 11  0  2  4  6
 
-    return y
+    return (H y)
 
 {-# INLINE addRndConstant #-}
-addRndConstant :: MV.STVector s Word64 -> Int -> Word64 -> Word64 -> ST s () 
-addRndConstant x i rndNr c = do
+addRndConstant :: HashState s -> Int -> Word64 -> Word64 -> ST s () 
+addRndConstant (H x) i rndNr c = do
     xi <- MV.unsafeRead x i 
     MV.unsafeWrite x i (xi `xor` c `xor` rndNr)
 
---{-# INLINE extractColumn #-}
+
 extractColumn :: Int 
-        -> MV.STVector s Word64
+        -> HashState s
         -> MV.STVector s Word64
         -> Int -> Int -> Int -> Int
         -> Int -> Int -> Int -> Int 
@@ -223,19 +225,19 @@ extractColumn i x y c0 c1 c2 c3 c4 c5 c6 c7 = do
     
     MV.unsafeWrite y i (x0 `xor` x1 `xor` x2 `xor` x3 `xor` x4 `xor` x5 `xor` x6 `xor` x7) 
 
-
 {-# INLINE tableLookup #-}
-tableLookup :: MV.STVector s Word64 -> Int -> Int -> ST s Word64
-tableLookup x i c = do
+tableLookup :: HashState s -> Int -> Int -> ST s Word64
+tableLookup (H x) i c = do
     w <- MV.unsafeRead x c
     return . V.unsafeIndex tables $ i * 256 + fromIntegral (w # i)
     where -- Extract byte from Word64
           (#) :: Word64 -> Int -> Word8    
           w # n = fromIntegral $ shiftR w (8 * (7 - n))
 
+
 outputTransform :: BlockLength -> V.Vector Word64 -> V.Vector Word64
 outputTransform blockLen x = V.zipWith xor (permP' x) x
-    where permP' y = V.create (V.thaw y >>= permPM blockLen)
+    where permP' y = V.create (H `liftM` V.thaw y >>= permPM blockLen >>= return . getState)
 
 ---------------------------- Parsing, padding and truncating ------------------------------
 
